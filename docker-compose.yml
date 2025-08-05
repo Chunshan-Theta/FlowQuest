@@ -10,7 +10,8 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
-      - MONGODB_URI=mongodb://mongo:27017/flowquest
+      - MONGODB_URI=mongodb://admin:password123@mongo:27017/flowquest?authSource=admin
+      - MONGODB_DB_NAME=flowquest
     depends_on:
       - mongo
     networks:

@@ -62,7 +62,7 @@ function AgentForm({ agent, onSubmit, onCancel, isSubmitting = false }: AgentFor
             type="text"
             value={formData.name}
             onChange={(e) => handleInputChange('name', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
             placeholder="請輸入 Agent 名稱"
             required
           />
@@ -77,7 +77,7 @@ function AgentForm({ agent, onSubmit, onCancel, isSubmitting = false }: AgentFor
               type="text"
               value={formData.persona.tone}
               onChange={(e) => handleInputChange('persona.tone', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
               placeholder="例：親切健談"
               required
             />
@@ -91,7 +91,7 @@ function AgentForm({ agent, onSubmit, onCancel, isSubmitting = false }: AgentFor
               type="text"
               value={formData.persona.background}
               onChange={(e) => handleInputChange('persona.background', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
               placeholder="例：5年銷售經驗"
               required
             />
@@ -105,7 +105,7 @@ function AgentForm({ agent, onSubmit, onCancel, isSubmitting = false }: AgentFor
               type="text"
               value={formData.persona.voice}
               onChange={(e) => handleInputChange('persona.voice', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
               placeholder="例：女性、28歲、溫柔"
               required
             />
@@ -269,7 +269,7 @@ export default function AgentsPage() {
                     placeholder="搜尋 Agent..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
                   />
                 </div>
                 <button

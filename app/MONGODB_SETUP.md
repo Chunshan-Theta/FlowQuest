@@ -4,16 +4,40 @@
 
 ## 🚀 設置步驟
 
-### 1. 安裝 MongoDB
+### 1. 啟動 MongoDB
 
-#### 使用 Docker（推薦）
+#### 使用 Docker Compose（推薦）
 ```bash
-# 啟動 MongoDB 容器
+# 在專案根目錄執行
+make run local
+# 或
+docker compose up -d mongo
+```
+
+這會啟動一個帶有身份驗證的 MongoDB 實例：
+- 用戶名：`admin`
+- 密碼：`password123`
+- 數據庫：`flowquest`
+
+#### 使用 Docker 手動啟動
+```bash
+# 啟動帶身份驗證的 MongoDB 容器
 docker run -d \
   --name flowquest-mongo \
   -p 27017:27017 \
+  -e MONGO_INITDB_ROOT_USERNAME=admin \
+  -e MONGO_INITDB_ROOT_PASSWORD=password123 \
   -e MONGO_INITDB_DATABASE=flowquest \
-  mongo:latest
+  mongo:7.0
+```
+
+#### 無身份驗證的本地 MongoDB
+```bash
+# 簡單的無身份驗證 MongoDB
+docker run -d \
+  --name flowquest-mongo-simple \
+  -p 27017:27017 \
+  mongo:7.0
 ```
 
 #### 本地安裝
@@ -26,14 +50,23 @@ docker run -d \
 在 `app/.env.local` 文件中設置：
 
 ```env
-# 本地 MongoDB
-MONGODB_URI=mongodb://localhost:27017
+# 使用 Docker Compose 的 MongoDB（帶身份驗證）
+MONGODB_URI=mongodb://admin:password123@localhost:27017/flowquest?authSource=admin
 MONGODB_DB_NAME=flowquest
 
-# 或 MongoDB Atlas（雲端）
+# 無身份驗證的本地 MongoDB
+# MONGODB_URI=mongodb://localhost:27017
+# MONGODB_DB_NAME=flowquest
+
+# MongoDB Atlas（雲端）
 # MONGODB_URI=mongodb+srv://<username>:<password>@<cluster-url>/<database>?retryWrites=true&w=majority
 # MONGODB_DB_NAME=flowquest
 ```
+
+**重要提示**：
+- 如果使用 `docker compose up -d mongo`，請使用帶身份驗證的連接字符串
+- 如果使用無身份驗證的 MongoDB，請使用簡單的連接字符串
+- `authSource=admin` 表示在 admin 數據庫中進行身份驗證
 
 ### 3. 測試連接
 
@@ -143,16 +176,49 @@ curl "http://localhost:3000/api/agents?name=客服"
 
 ## 🚨 故障排除
 
-1. **連接失敗**
-   - 確認 MongoDB 服務正在運行
-   - 檢查環境變數設置
-   - 確認防火牆設置
+1. **身份驗證錯誤 (Unauthorized)**
+   ```
+   MongoServerError: Command find requires authentication
+   ```
+   - 確認 `.env.local` 中的連接字符串包含用戶名和密碼
+   - 使用：`mongodb://admin:password123@localhost:27017/flowquest?authSource=admin`
+   - 確保 MongoDB 容器正在運行：`docker ps`
 
-2. **ObjectId 錯誤**
+2. **連接失敗**
+   - 確認 MongoDB 服務正在運行：`docker compose ps`
+   - 檢查端口是否被占用：`lsof -i :27017`
+   - 重啟 MongoDB 容器：`docker compose restart mongo`
+
+3. **環境變數未加載**
+   - 重啟 Next.js 開發服務器
+   - 確認 `.env.local` 文件在 `app/` 目錄中
+   - 檢查環境變數名稱拼寫
+
+4. **ObjectId 錯誤**
    - 確保傳入的 ID 是 24 位十六進制字符串
 
-3. **驗證錯誤**
+5. **驗證錯誤**
    - 檢查請求數據格式
    - 確保必填字段不為空
+
+### 💡 實用命令
+
+```bash
+# 檢查 MongoDB 容器狀態
+docker compose ps
+
+# 查看 MongoDB 日誌
+docker compose logs mongo
+
+# 重啟 MongoDB
+docker compose restart mongo
+
+# 進入 MongoDB 容器
+docker exec -it flowquest-mongo mongosh -u admin -p password123
+
+# 使用 MongoDB Express Web UI
+open http://localhost:8081
+# 用戶名：admin，密碼：admin123
+```
 
 現在您的 FlowQuest 應用已成功連接到 MongoDB！🎉
