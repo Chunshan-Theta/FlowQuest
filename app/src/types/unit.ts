@@ -3,7 +3,6 @@
  */
 
 import { ObjectId } from './base';
-
 // ================================
 // Unit 關卡（每一個對話挑戰）
 // ================================
@@ -26,6 +25,7 @@ export interface Unit {
   agent_behavior_prompt: string;
   pass_condition: PassCondition;
   order: number;
+  difficulty_level: number; // 難度等級 (1-5)
   created_at: Date;
   updated_at: Date;
 }

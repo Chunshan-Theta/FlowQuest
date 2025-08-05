@@ -3,7 +3,8 @@
  */
 
 import { ObjectId } from './base';
-import { MemoryConfig } from './agent';
+import { AgentMemory } from './memory';
+
 // ================================
 // Activity 活動實例
 // ================================
@@ -14,22 +15,24 @@ export interface Activity {
   name: string;
   course_package_id: ObjectId;
   agent_profile_id: ObjectId;
-  current_unit_id?: ObjectId; // 改為可選
+  current_unit_id?: ObjectId;
   status: ActivityStatus;
-  hot_memory_ids?: MemoryConfig[]; // 改為可選
-  start_time: Date;
-  end_time?: Date; // nullable
+  memories?: AgentMemory[];
+  created_at: Date;
+  updated_at: Date;
 }
 
 // 創建活動輸入格式
-export type CreateActivityInput = Omit<Activity, '_id' | 'start_time' | 'end_time'>;
+export type CreateActivityInput = Omit<Activity, '_id' | 'created_at' | 'updated_at'>;
 
 // 更新活動輸入格式
-export type UpdateActivityInput = Partial<Omit<Activity, '_id'>> & { _id: ObjectId };
+export type UpdateActivityInput = Partial<Omit<Activity, '_id' | 'created_at' | 'updated_at'>> & { _id: ObjectId };
 
 // 活動查詢過濾器
 export interface ActivityFilter {
   status?: ActivityStatus;
-  start_after?: Date;
-  start_before?: Date;
+  course_package_id?: ObjectId;
+  agent_profile_id?: ObjectId;
+  created_after?: Date;
+  created_before?: Date;
 }

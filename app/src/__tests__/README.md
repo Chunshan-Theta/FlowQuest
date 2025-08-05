@@ -76,7 +76,7 @@ src/__tests__/
     voice: string;
   };
   memory_config: {
-    hot_memory_ids: AgentMemory[];
+    memory_ids: AgentMemory[];
     cold_memory_ids: AgentMemory[];
   };
 }

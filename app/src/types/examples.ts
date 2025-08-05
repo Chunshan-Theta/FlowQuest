@@ -15,10 +15,13 @@ import {
 
 import {
   AgentProfile,
-  AgentMemory,
   CreateAgentProfileInput,
-  CreateAgentMemoryInput,
 } from './agent';
+
+import {
+  AgentMemory,
+  CreateAgentMemoryInput,
+} from './memory';
 
 import {
   Activity,
@@ -170,10 +173,7 @@ export const EXAMPLE_AGENT_PROFILE: AgentProfile = {
     background: "擁有5年保養品銷售經驗，熟悉各種肌膚類型和產品特性，善於建立客戶信任感",
     voice: "女性、約28歲、語調溫柔但充滿自信"
   },
-  memory_config: {
-    hot_memory_ids: [EXAMPLE_MEMORIES[0], EXAMPLE_MEMORIES[1]], // 引用前兩個記憶
-    cold_memory_ids: [EXAMPLE_MEMORIES[2]] // 引用第三個記憶
-  },
+  memory_config: [EXAMPLE_MEMORIES[0], EXAMPLE_MEMORIES[1]], // 直接使用記憶陣列
   created_at: new Date('2024-01-01T00:00:00Z'),
   updated_at: new Date('2024-01-01T00:00:00Z'),
 };
@@ -183,12 +183,12 @@ export const EXAMPLE_AGENT_PROFILE: AgentProfile = {
 // ================================
 export const EXAMPLE_ACTIVITY: Activity = {
   _id: EXAMPLE_IDS.ACTIVITY_1,
-  user_id: EXAMPLE_IDS.USER_1,
+  name: "化妝技巧學習活動",
   course_package_id: EXAMPLE_IDS.COURSE_PACKAGE_1,
   agent_profile_id: EXAMPLE_IDS.AGENT_PROFILE_1,
   current_unit_id: EXAMPLE_IDS.UNIT_1,
-  status: "in_progress",
-  hot_memory_ids: [EXAMPLE_IDS.MEMORY_1, EXAMPLE_IDS.MEMORY_2],
+  status: "online",
+  memory_ids: [EXAMPLE_IDS.MEMORY_1, EXAMPLE_IDS.MEMORY_2],
   start_time: new Date('2024-01-01T10:00:00Z'),
 };
 
@@ -273,10 +273,7 @@ export const EXAMPLE_CREATE_INPUTS = {
       background: "擁有多年化妝教學經驗",
       voice: "溫和耐心的指導者"
     },
-    memory_config: {
-      hot_memory_ids: [],
-      cold_memory_ids: []
-    },
+    memory_config: [], // 空的記憶陣列
   } as CreateAgentProfileInput,
 
   AGENT_MEMORY: {
@@ -288,12 +285,12 @@ export const EXAMPLE_CREATE_INPUTS = {
   } as CreateAgentMemoryInput,
 
   ACTIVITY: {
-    user_id: EXAMPLE_IDS.USER_1,
+    name: "化妝技巧學習活動",
     course_package_id: EXAMPLE_IDS.COURSE_PACKAGE_1,
     agent_profile_id: EXAMPLE_IDS.AGENT_PROFILE_1,
     current_unit_id: EXAMPLE_IDS.UNIT_1,
-    status: "in_progress" as const,
-    hot_memory_ids: [],
+    status: "online" as const,
+    memory_ids: [],
   } as CreateActivityInput,
 
   INTERACTION_LOG: {

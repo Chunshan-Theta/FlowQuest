@@ -32,7 +32,7 @@ const MOCK_AGENT: AgentProfile = {
     voice: '溫暖的女性聲音'
   },
   memory_config: {
-    hot_memory_ids: [],
+    memory_ids: [],
     cold_memory_ids: []
   },
   created_at: new Date('2024-01-01T00:00:00Z'),
@@ -49,7 +49,7 @@ const MOCK_AGENT_RESPONSE = {
     voice: '溫暖的女性聲音'
   },
   memory_config: {
-    hot_memory_ids: [],
+    memory_ids: [],
     cold_memory_ids: []
   },
   created_at: '2024-01-01T00:00:00.000Z',
@@ -199,7 +199,7 @@ describe('Agent API CRUD Tests', () => {
           voice: '中性且清晰的聲音'
         },
         memory_config: {
-          hot_memory_ids: [],
+          memory_ids: [],
           cold_memory_ids: []
         }
       };
@@ -299,7 +299,7 @@ describe('Agent API CRUD Tests', () => {
       expect(data.data.persona).toHaveProperty('background');
       expect(data.data.persona).toHaveProperty('voice');
       expect(data.data).toHaveProperty('memory_config');
-      expect(data.data.memory_config).toHaveProperty('hot_memory_ids');
+      expect(data.data.memory_config).toHaveProperty('memory_ids');
       expect(data.data.memory_config).toHaveProperty('cold_memory_ids');
       expect(data.data).toHaveProperty('created_at');
       expect(data.data).toHaveProperty('updated_at');

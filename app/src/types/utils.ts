@@ -6,7 +6,8 @@
 import { ObjectId } from './base';
 import { CoursePackage } from './course-package';
 import { Unit, PassConditionType } from './unit';
-import { AgentProfile, AgentMemory, MemoryType } from './agent';
+import { AgentProfile } from './agent';
+import { AgentMemory, MemoryType } from './memory';
 import { Activity, ActivityStatus } from './activity';
 import { InteractionLog } from './interaction';
 import { UnitResultStatus } from './report';
@@ -157,23 +158,18 @@ export function validateAgentProfile(data: Partial<AgentProfile>): string[] {
   }
   
   if (data.memory_config) {
-    // 驗證熱記憶物件
-    if (data.memory_config.hot_memory_ids) {
-      data.memory_config.hot_memory_ids.forEach((memory, index) => {
-        if (memory._id && !isValidObjectId(memory._id)) {
-          errors.push(`第 ${index + 1} 個熱記憶 ID 格式無效`);
-        }
-      });
-    }
-    
-    // 驗證冷記憶物件
-    if (data.memory_config.cold_memory_ids) {
-      data.memory_config.cold_memory_ids.forEach((memory, index) => {
-        if (memory._id && !isValidObjectId(memory._id)) {
-          errors.push(`第 ${index + 1} 個冷記憶 ID 格式無效`);
-        }
-      });
-    }
+    // 驗證記憶配置陣列
+    data.memory_config.forEach((memory, index) => {
+      if (memory._id && !isValidObjectId(memory._id)) {
+        errors.push(`第 ${index + 1} 個記憶 ID 格式無效`);
+      }
+      if (memory.agent_id && !isValidObjectId(memory.agent_id)) {
+        errors.push(`第 ${index + 1} 個記憶的 agent_id 格式無效`);
+      }
+      if (memory.created_by_user_id && !isValidObjectId(memory.created_by_user_id)) {
+        errors.push(`第 ${index + 1} 個記憶的 created_by_user_id 格式無效`);
+      }
+    });
   }
   
   return errors;
@@ -224,10 +220,6 @@ export function validateAgentMemory(data: Partial<AgentMemory>): string[] {
 export function validateActivity(data: Partial<Activity>): string[] {
   const errors: string[] = [];
   
-  if (data.user_id && !isValidObjectId(data.user_id)) {
-    errors.push('使用者 ID 格式無效');
-  }
-  
   if (data.course_package_id && !isValidObjectId(data.course_package_id)) {
     errors.push('課程包 ID 格式無效');
   }
@@ -244,10 +236,10 @@ export function validateActivity(data: Partial<Activity>): string[] {
     errors.push('活動狀態無效');
   }
   
-  if (data.hot_memory_ids) {
-    data.hot_memory_ids.forEach((memoryId, index) => {
+  if (data.memory_ids) {
+    data.memory_ids.forEach((memoryId, index) => {
       if (!isValidObjectId(memoryId)) {
-        errors.push(`第 ${index + 1} 個熱記憶 ID 格式無效`);
+        errors.push(`第 ${index + 1} 個記憶 ID 格式無效`);
       }
     });
   }

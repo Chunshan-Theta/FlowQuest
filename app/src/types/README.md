@@ -30,7 +30,8 @@ import { CoursePackage, Unit, AgentProfile } from '@/types';
 ```typescript
 import { CoursePackage, CreateCoursePackageInput } from '@/types/course-package';
 import { Unit, PassCondition } from '@/types/unit';
-import { AgentProfile, AgentMemory } from '@/types/agent';
+import { AgentProfile } from '@/types/agent';
+import { AgentMemory } from '@/types/memory';
 ```
 
 ### 3. 導入工具函數

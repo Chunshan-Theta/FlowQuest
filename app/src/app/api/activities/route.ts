@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
     const newActivity: Activity = {
       _id: generateObjectId(),
       ...activityData,
-      hot_memory_ids: [], // 確保初始化為空陣列
+      memory_ids: [], // 確保初始化為空陣列
       start_time: new Date(),
     };
 

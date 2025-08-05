@@ -114,7 +114,7 @@ curl http://localhost:3000/api/db/test?init=true
     voice: "聲音描述"
   },
   memory_config: {
-    hot_memory_ids: [],
+    memory_ids: [],
     cold_memory_ids: []
   },
   created_at: "創建時間",
@@ -156,7 +156,7 @@ curl -X POST http://localhost:3000/api/agents \
       "voice": "溫暖、耐心"
     },
     "memory_config": {
-      "hot_memory_ids": [],
+      "memory_ids": [],
       "cold_memory_ids": []
     }
   }'

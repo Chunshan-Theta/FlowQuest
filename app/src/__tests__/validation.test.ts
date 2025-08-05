@@ -21,7 +21,7 @@ describe('數據驗證功能測試', () => {
           voice: '溫暖'
         },
         memory_config: {
-          hot_memory_ids: [],
+          memory_ids: [],
           cold_memory_ids: []
         }
       };
@@ -39,7 +39,7 @@ describe('數據驗證功能測試', () => {
           voice: '溫暖'
         },
         memory_config: {
-          hot_memory_ids: [],
+          memory_ids: [],
           cold_memory_ids: []
         }
       };
@@ -56,7 +56,7 @@ describe('數據驗證功能測試', () => {
           voice: '溫暖'
         },
         memory_config: {
-          hot_memory_ids: [],
+          memory_ids: [],
           cold_memory_ids: []
         }
       };
@@ -74,7 +74,7 @@ describe('數據驗證功能測試', () => {
           voice: '溫暖'
         },
         memory_config: {
-          hot_memory_ids: [],
+          memory_ids: [],
           cold_memory_ids: []
         }
       };
@@ -96,7 +96,7 @@ describe('數據驗證功能測試', () => {
       const invalidAgent = {
         name: '測試代理人',
         memory_config: {
-          hot_memory_ids: [
+          memory_ids: [
             {
               _id: 'invalid-id',
               type: 'hot' as const,
@@ -182,7 +182,7 @@ describe('數據驗證功能測試', () => {
           voice: '清晰親切'
         },
         memory_config: {
-          hot_memory_ids: [],
+          memory_ids: [],
           cold_memory_ids: []
         }
       };
@@ -223,7 +223,7 @@ describe('數據驗證功能測試', () => {
           voice: '清晰'
         },
         memory_config: {
-          hot_memory_ids: [],
+          memory_ids: [],
           cold_memory_ids: []
         }
       };

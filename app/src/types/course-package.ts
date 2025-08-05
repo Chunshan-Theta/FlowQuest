@@ -3,6 +3,7 @@
  */
 
 import { ObjectId } from './base';
+import { AgentMemory } from './memory';
 import { Unit } from './unit';
 
 // ================================
@@ -15,6 +16,7 @@ export interface CoursePackage {
   units: Unit[]; // 連結至 Unit 關卡
   created_at: Date;
   updated_at: Date;
+  memories: AgentMemory[]; // 相關記憶的 ID 列表
 }
 
 // 創建課程包輸入格式

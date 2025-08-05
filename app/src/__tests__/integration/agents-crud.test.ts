@@ -42,7 +42,7 @@ describe('Agent CRUD 整合測試', () => {
       voice: '清晰溫暖的聲音'
     },
     memory_config: {
-      hot_memory_ids: [],
+      memory_ids: [],
       cold_memory_ids: []
     }
   };

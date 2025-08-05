@@ -124,12 +124,20 @@ export default function ActivityDetailPage() {
                 {getStatusText(activity.status)}
               </div>
             </div>
-            <button
-              onClick={() => router.push(`/activities/${activity._id}/edit`)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-            >
-              編輯活動
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => router.push(`/activities/${activity._id}/chat`)}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+              >
+                💬 開始對話
+              </button>
+              <button
+                onClick={() => router.push(`/activities/${activity._id}/edit`)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                編輯活動
+              </button>
+            </div>
           </div>
           
           <div className="grid md:grid-cols-2 gap-4 text-sm">
@@ -139,14 +147,12 @@ export default function ActivityDetailPage() {
             </div>
             <div>
               <span className="font-medium text-gray-600">建立時間：</span>
-              <span className="text-gray-800">{new Date(activity.start_time).toLocaleString('zh-TW')}</span>
+              <span className="text-gray-800">{new Date(activity.created_at).toLocaleString('zh-TW')}</span>
             </div>
-            {activity.end_time && (
-              <div>
-                <span className="font-medium text-gray-600">結束時間：</span>
-                <span className="text-gray-800">{new Date(activity.end_time).toLocaleString('zh-TW')}</span>
-              </div>
-            )}
+            <div>
+              <span className="font-medium text-gray-600">更新時間：</span>
+              <span className="text-gray-800">{new Date(activity.updated_at).toLocaleString('zh-TW')}</span>
+            </div>
           </div>
         </div>
 
@@ -226,12 +232,12 @@ export default function ActivityDetailPage() {
         </div>
 
         {/* 記憶配置 */}
-        {(activity.hot_memory_ids?.length ?? 0) > 0 && (
+        {(activity.memories?.length ?? 0) > 0 && (
           <div className="bg-white rounded-lg shadow-md p-6 mt-6">
             <h2 className="text-xl font-semibold text-gray-800 mb-4">🧠 記憶配置</h2>
             <div className="text-sm">
               <span className="font-medium text-gray-600">熱記憶數量：</span>
-              <span className="text-gray-800">{activity.hot_memory_ids?.length ?? 0} 個</span>
+              <span className="text-gray-800">{activity.memories?.length ?? 0} 個</span>
             </div>
           </div>
         )}
@@ -243,6 +249,12 @@ export default function ActivityDetailPage() {
             className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
           >
             返回列表
+          </button>
+          <button
+            onClick={() => router.push(`/activities/${activity._id}/chat`)}
+            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+          >
+            開始對話
           </button>
           <button
             onClick={() => router.push(`/activities/${activity._id}/edit`)}

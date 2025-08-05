@@ -23,7 +23,7 @@ function ActivityForm({ activity, onSubmit, onCancel, isSubmitting = false }: Ac
     course_package_id: activity?.course_package_id || '',
     agent_profile_id: activity?.agent_profile_id || '',
     status: activity?.status || 'online',
-    hot_memory_ids: activity?.hot_memory_ids || [],
+    memory_ids: activity?.memory_ids || [],
   });
 
   useEffect(() => {

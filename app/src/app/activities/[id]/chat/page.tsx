@@ -1,0 +1,472 @@
+'use client';
+
+import React, { useState, useEffect, useRef } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { Activity, AgentProfile, CoursePackage, ChatSession, ChatMessage, OpenAIChatMessage, Unit } from '@/types';
+import { useActivities } from '@/hooks/useActivities';
+import { useAgents } from '@/hooks/useAgents';
+import { useCoursePackages } from '@/hooks/useCoursePackages';
+import { useChat } from '@/hooks/useChat';
+import { useUnitProgress } from '@/hooks/useUnitProgress';
+
+export default function ActivityChatPage() {
+  const params = useParams();
+  const router = useRouter();
+  const { fetchActivity } = useActivities();
+  const { fetchAgent } = useAgents();
+  const { fetchCoursePackage } = useCoursePackages();
+  const { loadChatSession, sendChatToOpenAI, restartChat, saveChatSession, isLoading, error } = useChat();
+  const { checkUnitProgress, isChecking } = useUnitProgress();
+
+  const [activity, setActivity] = useState<Activity | null>(null);
+  const [agent, setAgent] = useState<AgentProfile | null>(null);
+  const [coursePackage, setCoursePackage] = useState<CoursePackage | null>(null);
+  const [chatSession, setChatSession] = useState<ChatSession | null>(null);
+  const [currentMessage, setCurrentMessage] = useState('');
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [showCompletionModal, setShowCompletionModal] = useState(false);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // 自動滾動到底部
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [chatSession?.messages]);
+
+  // 載入活動資料
+  useEffect(() => {
+    const loadActivityData = async () => {
+      try {
+        setInitialLoading(true);
+        
+        const activityId = params.id as string;
+        
+        // 載入活動詳情
+        const activityData = await fetchActivity(activityId);
+        setActivity(activityData);
+        
+        // 並行載入相關資料
+        const [agentData, coursePackageData] = await Promise.all([
+          fetchAgent(activityData.agent_profile_id),
+          fetchCoursePackage(activityData.course_package_id, true)
+        ]);
+        
+        setAgent(agentData);
+        setCoursePackage(coursePackageData);
+
+        console.log('活動資料載入成功:', activityData);
+        console.log('代理人資料載入成功:', agentData);
+        console.log('課程包資料載入成功:', coursePackageData);
+        
+        // 載入聊天會話
+        const session = loadChatSession(activityId);
+        setChatSession(session);
+        
+        // 如果沒有現有會話，初始化對話會話
+        if (!session && coursePackageData.units.length > 0) {
+          console.log('沒有現有會話，初始化對話會話');
+          
+          // 找到 order 最小的關卡作為第一個關卡
+          const sortedUnits = [...coursePackageData.units].sort((a, b) => a.order - b.order);
+          const firstUnit = sortedUnits[0];
+          
+          // 直接初始化聊天會話，包含第一個關卡的開頭語
+          const initialSession: ChatSession = {
+            activity_id: activityId,
+            current_unit_id: firstUnit._id.toString(),
+            messages: [],
+            current_turn: 0,
+            is_completed: false,
+            started_at: new Date(),
+            updated_at: new Date()
+          };
+          
+          // 如果第一個關卡有開頭語，添加為第一個訊息
+          if (firstUnit.intro_message) {
+            initialSession.messages.push({
+              id: `intro-${Date.now()}`,
+              role: 'assistant',
+              content: firstUnit.intro_message,
+              timestamp: new Date(),
+              unit_id: firstUnit._id.toString()
+            });
+          }
+          
+          // 設定會話並保存到 localStorage
+          setChatSession(initialSession);
+          // 使用 setTimeout 確保狀態更新完成後再保存
+          setTimeout(() => {
+            saveChatSession(activityId, initialSession);
+          }, 100);
+        }
+        
+      } catch (err) {
+        console.error('載入活動資料失敗:', err);
+      } finally {
+        setInitialLoading(false);
+      }
+    };
+
+    if (params.id) {
+      loadActivityData();
+    }
+  }, [params.id, fetchActivity, fetchAgent, fetchCoursePackage, loadChatSession, saveChatSession]);
+
+  // 發送訊息
+  const handleSendMessage = async () => {
+    if (!currentMessage.trim() || !activity || isLoading) return;
+
+    const message = currentMessage.trim();
+    setCurrentMessage('');
+
+    try {
+      // 準備發送給 OpenAI 的訊息
+      const userMessage: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: 'user',
+        content: message,
+        timestamp: new Date()
+      };
+
+      // 準備 OpenAI 的訊息格式
+      const openAIMessages: any[] = [
+        {
+          role: 'system' as const,
+          content: `你是一個學習助手，協助學習者完成單元。目前學習者在進行：${currentUnit?.title || '未知單元'}。`
+        },
+        ...(chatSession?.messages || []).map(msg => ({
+          role: msg.role as 'user' | 'assistant',
+          content: msg.content
+        })),
+        {
+          role: 'user' as const,
+          content: message
+        }
+      ];
+
+      // 呼叫 OpenAI API
+      const response = await sendChatToOpenAI(openAIMessages);
+
+      if (response) {
+        const assistantMessage: ChatMessage = {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: response,
+          timestamp: new Date()
+        };
+
+        // 更新對話紀錄
+        const updatedSession: ChatSession = {
+          activity_id: activity._id.toString(),
+          current_unit_id: currentUnit?._id.toString() || '',
+          messages: [...(chatSession?.messages || []), userMessage, assistantMessage],
+          current_turn: (chatSession?.current_turn || 0) + 1,
+          is_completed: false,
+          started_at: chatSession?.started_at || new Date(),
+          updated_at: new Date()
+        };
+        
+        setChatSession(updatedSession);
+        saveChatSession(activity._id.toString(), updatedSession);
+
+        // 檢查單元進度
+        if (currentUnit) {
+          const progress = await checkUnitProgress(
+            currentUnit,
+            updatedSession.messages
+          );
+          
+          if (progress.is_passed) {
+            // 處理單元完成邏輯
+            console.log('單元完成！準備切換到下一個單元');
+            // 可以在這裡實現切換到下一個單元的邏輯
+          }
+        }
+      }
+      
+    } catch (error) {
+      console.error('發送訊息失敗:', error);
+    }
+  };
+
+  // 處理鍵盤事件
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
+  // 重新開始聊天
+  const handleRestartChat = () => {
+    if (activity && coursePackage) {
+      restartChat(activity._id.toString());
+      
+      // 重新初始化會話
+      const sortedUnits = [...coursePackage.units].sort((a, b) => a.order - b.order);
+      const firstUnit = sortedUnits[0];
+      
+      if (firstUnit) {
+        const initialSession: ChatSession = {
+          activity_id: activity._id.toString(),
+          current_unit_id: firstUnit._id.toString(),
+          messages: [],
+          current_turn: 0,
+          is_completed: false,
+          started_at: new Date(),
+          updated_at: new Date()
+        };
+        
+        // 如果第一個關卡有開頭語，添加為第一個訊息
+        if (firstUnit.intro_message) {
+          initialSession.messages.push({
+            id: `intro-${Date.now()}`,
+            role: 'assistant',
+            content: firstUnit.intro_message,
+            timestamp: new Date(),
+            unit_id: firstUnit._id.toString()
+          });
+        }
+        
+        setChatSession(initialSession);
+        saveChatSession(activity._id.toString(), initialSession);
+      } else {
+        setChatSession(null);
+      }
+      
+      setShowCompletionModal(false);
+    }
+  };
+
+  // 獲取當前單元資訊
+  const getCurrentUnit = () => {
+    if (!coursePackage || !chatSession) return null;
+    // 確保使用排序後的單元列表
+    const sortedUnits = [...coursePackage.units].sort((a, b) => a.order - b.order);
+    return sortedUnits.find(unit => 
+      unit._id.toString() === chatSession.current_unit_id
+    );
+  };
+
+  // 獲取排序後的單元列表
+  const getSortedUnits = () => {
+    if (!coursePackage) return [];
+    return [...coursePackage.units].sort((a, b) => a.order - b.order);
+  };
+
+  const currentUnit = getCurrentUnit();
+  const sortedUnits = getSortedUnits();
+
+  if (initialLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">載入中...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!activity || !agent || !coursePackage) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-red-500 text-6xl mb-4">⚠️</div>
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">載入失敗</h2>
+          <p className="text-gray-600 mb-4">找不到指定的活動資料</p>
+          <button
+            onClick={() => router.push('/activities')}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          >
+            返回活動列表
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      {/* 標題欄 */}
+      <div className="bg-white border-b border-gray-200 px-4 py-3">
+        <div className="max-w-4xl mx-auto flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <button
+              onClick={() => router.push(`/activities/${activity._id.toString()}`)}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              ← 返回
+            </button>
+            <div>
+              <h1 className="text-lg font-semibold text-gray-800">{activity.name}</h1>
+              <p className="text-sm text-gray-600">
+                與 {agent.name} 對話
+                {currentUnit && ` - ${currentUnit.title}`}
+              </p>
+            </div>
+          </div>
+          
+          {/* 進度指示器 */}
+          {coursePackage.units.length > 0 && chatSession && (
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-gray-600">進度:</span>
+              <div className="flex space-x-1">
+                {getSortedUnits().map((unit, index) => {
+                  const isCurrent = unit._id.toString() === chatSession.current_unit_id;
+                  const isCompleted = getSortedUnits().findIndex(u => 
+                    u._id.toString() === chatSession.current_unit_id
+                  ) > index;
+                  
+                  return (
+                    <div
+                      key={unit._id.toString()}
+                      className={`w-3 h-3 rounded-full ${
+                        isCompleted 
+                          ? 'bg-green-500' 
+                          : isCurrent 
+                            ? 'bg-blue-500' 
+                            : 'bg-gray-300'
+                      }`}
+                      title={`${unit.order}. ${unit.title}`}
+                    />
+                  );
+                })}
+              </div>
+              <button
+                onClick={handleRestartChat}
+                className="ml-4 px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+              >
+                重新開始
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 聊天區域 */}
+      <div className="flex-1 max-w-4xl mx-auto w-full flex flex-col">
+        {/* 訊息列表 */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {chatSession?.messages.length === 0 && (
+            <div className="text-center text-gray-500 py-8">
+              <p className="text-lg mb-2">歡迎開始與 {agent.name} 的對話！</p>
+              <p className="text-sm">輸入訊息開始你的學習之旅</p>
+            </div>
+          )}
+          
+          {chatSession?.messages.map((message) => (
+            <ChatMessageComponent key={message.id} message={message} agentName={agent.name} />
+          ))}
+          
+          {isLoading && (
+            <div className="flex justify-start">
+              <div className="bg-gray-200 rounded-lg px-4 py-2 max-w-xs">
+                <div className="flex space-x-1">
+                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* 輸入區域 */}
+        <div className="border-t border-gray-200 bg-white p-4">
+          <div className="flex space-x-2">
+            <input
+              ref={inputRef}
+              type="text"
+              value={currentMessage}
+              onChange={(e) => setCurrentMessage(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder="輸入您的訊息..."
+              disabled={isLoading || chatSession?.is_completed}
+              className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-500"
+            />
+            <button
+              onClick={handleSendMessage}
+              disabled={!currentMessage.trim() || isLoading || chatSession?.is_completed}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+            >
+              發送
+            </button>
+          </div>
+          
+          {error && (
+            <div className="mt-2 text-red-600 text-sm">
+              {error}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 完成課程 Modal */}
+      {showCompletionModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-8 max-w-md mx-4">
+            <div className="text-center">
+              <div className="text-6xl mb-4">🎉</div>
+              <h2 className="text-2xl font-bold text-gray-800 mb-2">恭喜通關！</h2>
+              <p className="text-gray-600 mb-6">
+                您已成功完成 "{coursePackage.title}" 的所有關卡！
+              </p>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => setShowCompletionModal(false)}
+                  className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+                >
+                  繼續查看對話
+                </button>
+                <button
+                  onClick={handleRestartChat}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                  重新開始
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// 聊天訊息組件
+function ChatMessageComponent({ message, agentName }: { message: ChatMessage; agentName: string }) {
+  const isUser = message.role === 'user';
+  
+  return (
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+      <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+        isUser 
+          ? 'bg-blue-600 text-white' 
+          : 'bg-gray-200 text-gray-800'
+      }`}>
+        {!isUser && (
+          <div className="text-xs font-medium mb-1 opacity-75">
+            {agentName}
+          </div>
+        )}
+        <div className="whitespace-pre-wrap break-words">
+          {message.content}
+        </div>
+        <div className={`text-xs mt-1 ${isUser ? 'text-blue-200' : 'text-gray-500'}`}>
+          {new Date(message.timestamp).toLocaleTimeString('zh-TW', { 
+            hour: '2-digit', 
+            minute: '2-digit' 
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}

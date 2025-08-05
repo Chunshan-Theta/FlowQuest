@@ -19,7 +19,7 @@ function AgentForm({ agent, onSubmit, onCancel, isSubmitting = false }: AgentFor
       voice: agent?.persona.voice || '',
     },
     memory_config: {
-      hot_memory_ids: [],
+      memory_ids: [],
       cold_memory_ids: [],
     },
   });
