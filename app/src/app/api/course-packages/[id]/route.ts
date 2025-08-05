@@ -48,12 +48,12 @@ export async function GET(
     return NextResponse.json({
       success: true,
       data: coursePackage,
-      message: '成功獲取課程包詳情'
+      message: '成功獲取課程包'
     });
   } catch (error) {
     return NextResponse.json({
       success: false,
-      error: '獲取課程包詳情失敗',
+      error: '獲取課程包失敗',
       message: error instanceof Error ? error.message : '未知錯誤'
     }, { status: 500 });
   }
@@ -89,18 +89,19 @@ export async function PUT(
     }
     
     // 更新 course package
-    const updatedCoursePackage: CoursePackage = {
-      ...existingCoursePackage,
+    const updateData = {
       ...body,
-      _id: id,
       updated_at: new Date(),
     };
     
-    const result = await collection.replaceOne({ _id: id }, updatedCoursePackage);
+    const result = await collection.updateOne({ _id: id }, { $set: updateData });
     
     if (!result.acknowledged) {
       throw new Error('更新資料庫失敗');
     }
+
+    // 獲取更新後的資料
+    const updatedCoursePackage = await collection.findOne({ _id: id });
     
     return NextResponse.json({
       success: true,
@@ -151,7 +152,7 @@ export async function DELETE(
       return NextResponse.json({
         success: false,
         error: '無法刪除課程包',
-        message: `此課程包下還有 ${relatedUnits} 個關卡，請先刪除所有關卡後再刪除課程包`
+        message: '此課程包包含關卡，請先刪除所有關卡'
       }, { status: 400 });
     }
     

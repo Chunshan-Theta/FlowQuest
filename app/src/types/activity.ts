@@ -3,7 +3,7 @@
  */
 
 import { ObjectId } from './base';
-
+import { MemoryConfig } from './agent';
 // ================================
 // Activity 活動實例
 // ================================
@@ -16,7 +16,7 @@ export interface Activity {
   agent_profile_id: ObjectId;
   current_unit_id: ObjectId;
   status: ActivityStatus;
-  hot_memory_ids: ObjectId[];
+  hot_memory_ids: MemoryConfig[];
   start_time: Date;
   end_time?: Date; // nullable
 }
