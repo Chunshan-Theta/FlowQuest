@@ -1,18 +1,43 @@
 import { useState, useCallback } from 'react';
-import { Unit, ChatMessage, OpenAIChatMessage, SimpleChatRequest, SimpleChatResponse } from '@/types';
+import { Unit, ChatMessage, OpenAIChatMessage, SimpleChatRequest, SimpleChatResponse, CoursePackage } from '@/types';
 
 export interface UnitProgressResult {
   is_passed: boolean;
   reason?: string;
+  next_unit_id?: string;
+  is_course_completed?: boolean;
 }
 
 export function useUnitProgress() {
   const [isChecking, setIsChecking] = useState(false);
 
+  // 獲取下一個關卡資訊
+  const getNextUnit = useCallback((currentUnit: Unit, coursePackage: CoursePackage) => {
+    const sortedUnits = [...coursePackage.units].sort((a, b) => a.order - b.order);
+    const currentIndex = sortedUnits.findIndex(unit => 
+      unit._id.toString() === currentUnit._id.toString()
+    );
+    
+    if (currentIndex === -1) {
+      return { nextUnitId: undefined, isCourseCompleted: false };
+    }
+    
+    const nextIndex = currentIndex + 1;
+    if (nextIndex >= sortedUnits.length) {
+      return { nextUnitId: undefined, isCourseCompleted: true };
+    }
+    
+    return { 
+      nextUnitId: sortedUnits[nextIndex]._id.toString(), 
+      isCourseCompleted: false 
+    };
+  }, []);
+
   // 檢查關卡通過條件
   const checkUnitProgress = useCallback(async (
     unit: Unit,
-    messages: ChatMessage[]
+    messages: ChatMessage[],
+    coursePackage?: CoursePackage
   ): Promise<UnitProgressResult> => {
     setIsChecking(true);
 
@@ -27,6 +52,16 @@ export function useUnitProgress() {
         const hasAllKeywords = pass_condition.value.every(keyword => 
           allUserContent.includes(keyword.toLowerCase())
         );
+        
+        if (hasAllKeywords && coursePackage) {
+          const nextUnitInfo = getNextUnit(unit, coursePackage);
+          return {
+            is_passed: true,
+            reason: '包含所有必要關鍵詞',
+            next_unit_id: nextUnitInfo.nextUnitId,
+            is_course_completed: nextUnitInfo.isCourseCompleted
+          };
+        }
         
         return {
           is_passed: hasAllKeywords,
@@ -62,7 +97,20 @@ ${messages.map(msg => `${msg.role}: ${msg.content}`).join('\n')}
 
         if (responseData.success) {
           const result = responseData.message;
-          const isPassed = result.toLowerCase().includes('yes');
+          const resultLower = result.toLowerCase();
+          
+          // 更準確的判斷邏輯，考慮各種可能的回應格式
+          const isPassed = resultLower.includes('yes') && !resultLower.includes('no');
+          
+          if (isPassed && coursePackage) {
+            const nextUnitInfo = getNextUnit(unit, coursePackage);
+            return {
+              is_passed: true,
+              reason: result,
+              next_unit_id: nextUnitInfo.nextUnitId,
+              is_course_completed: nextUnitInfo.isCourseCompleted
+            };
+          }
           
           return {
             is_passed: isPassed,

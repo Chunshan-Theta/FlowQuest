@@ -29,6 +29,72 @@ export default function ActivityChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // 生成系統提示詞，包含 agent 和關卡資訊
+  const generateSystemPrompt = (agent: AgentProfile | null, currentUnit: Unit | null, coursePackage: CoursePackage | null): string => {
+    if (!agent) return '你是一個學習助手，協助學習者完成學習任務。';
+
+    let prompt = `你是 ${agent.name}，`;
+
+    // 添加 agent 的人格設定
+    if (agent.persona) {
+      if (agent.persona.background) {
+        prompt += `背景：${agent.persona.background} `;
+      }
+      if (agent.persona.tone) {
+        prompt += `語調：${agent.persona.tone} `;
+      }
+      if (agent.persona.voice) {
+        prompt += `說話風格：${agent.persona.voice} `;
+      }
+    }
+
+    // 添加課程包資訊
+    if (coursePackage) {
+      prompt += `\n\n當前課程：${coursePackage.title}`;
+      if (coursePackage.description) {
+        prompt += `\n課程描述：${coursePackage.description}`;
+      }
+    }
+
+    // 添加當前關卡資訊
+    if (currentUnit) {
+      prompt += `\n\n當前關卡：${currentUnit.title}`;
+      
+      // 添加角色設定
+      if (currentUnit.agent_role) {
+        prompt += `\n你在這個關卡的角色：${currentUnit.agent_role}`;
+      }
+      if (currentUnit.user_role) {
+        prompt += `\n學習者的角色：${currentUnit.user_role}`;
+      }
+
+      // 添加行為提示
+      if (currentUnit.agent_behavior_prompt) {
+        prompt += `\n行為指引：${currentUnit.agent_behavior_prompt}`;
+      }
+
+      // 添加通過條件
+      if (currentUnit.pass_condition) {
+        const condition = currentUnit.pass_condition;
+        if (condition.type === 'keyword' && condition.value && condition.value.length > 0) {
+          prompt += `\n通過條件：學習者需要在對話中提到關鍵詞：${condition.value.join('、')}`;
+        } else if (condition.type === 'llm' && condition.value && condition.value.length > 0) {
+          prompt += `\n通過條件：${condition.value.join('；')}`;
+        }
+      }
+
+      // 添加關卡限制
+      if (currentUnit.max_turns && currentUnit.max_turns > 0) {
+        prompt += `\n對話回合限制：最多 ${currentUnit.max_turns} 回合`;
+      }
+    }
+
+    // 添加角色指引
+    prompt += `\n\n請確定角色立場在進行回應。`;
+
+    return prompt;
+  };
+
   // 自動滾動到底部
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -134,10 +200,17 @@ export default function ActivityChatPage() {
       };
 
       // 準備 OpenAI 的訊息格式
+      const systemPrompt = generateSystemPrompt(agent, currentUnit || null, coursePackage);
+      
+      // 調試：輸出系統提示內容
+      console.log('=== 系統提示 ===');
+      console.log(systemPrompt);
+      console.log('================');
+      
       const openAIMessages: any[] = [
         {
           role: 'system' as const,
-          content: `你是一個學習助手，協助學習者完成單元。目前學習者在進行：${currentUnit?.title || '未知單元'}。`
+          content: systemPrompt
         },
         ...(chatSession?.messages || []).map(msg => ({
           role: msg.role as 'user' | 'assistant',
@@ -178,13 +251,86 @@ export default function ActivityChatPage() {
         if (currentUnit) {
           const progress = await checkUnitProgress(
             currentUnit,
-            updatedSession.messages
+            updatedSession.messages,
+            coursePackage || undefined
           );
           
           if (progress.is_passed) {
-            // 處理單元完成邏輯
-            console.log('單元完成！準備切換到下一個單元');
-            // 可以在這裡實現切換到下一個單元的邏輯
+            console.log('單元完成！', progress);
+            
+            if (progress.is_course_completed) {
+              // 課程全部完成
+              console.log('恭喜！課程全部完成！');
+              
+              // 先發送當前關卡的結尾語（如果有的話）
+              let finalMessages = [...updatedSession.messages];
+              if (currentUnit.outro_message) {
+                const outroMessage: ChatMessage = {
+                  id: crypto.randomUUID(),
+                  role: 'assistant',
+                  content: currentUnit.outro_message,
+                  timestamp: new Date(),
+                  unit_id: currentUnit._id.toString()
+                };
+                finalMessages.push(outroMessage);
+              }
+              
+              // 標記會話為已完成
+              const completedSession: ChatSession = {
+                ...updatedSession,
+                messages: finalMessages,
+                is_completed: true
+              };
+              setChatSession(completedSession);
+              saveChatSession(activity._id.toString(), completedSession);
+              setShowCompletionModal(true);
+              
+            } else if (progress.next_unit_id) {
+              // 切換到下一個關卡
+              console.log('切換到下一個關卡:', progress.next_unit_id);
+              
+              const nextUnit = getSortedUnits().find(unit => 
+                unit._id.toString() === progress.next_unit_id
+              );
+              
+              if (nextUnit && progress.next_unit_id) {
+                let transitionMessages = [...updatedSession.messages];
+                
+                // 1. 先添加當前關卡的結尾語（如果有的話）
+                if (currentUnit.outro_message) {
+                  const outroMessage: ChatMessage = {
+                    id: crypto.randomUUID(),
+                    role: 'assistant',
+                    content: currentUnit.outro_message,
+                    timestamp: new Date(),
+                    unit_id: currentUnit._id.toString()
+                  };
+                  transitionMessages.push(outroMessage);
+                }
+                
+                // 2. 然後添加下一關的開頭語（如果有的話）
+                if (nextUnit.intro_message) {
+                  const introMessage: ChatMessage = {
+                    id: crypto.randomUUID(),
+                    role: 'assistant',
+                    content: nextUnit.intro_message,
+                    timestamp: new Date(),
+                    unit_id: progress.next_unit_id
+                  };
+                  transitionMessages.push(introMessage);
+                }
+                
+                // 3. 更新會話到下一關
+                const nextUnitSession: ChatSession = {
+                  ...updatedSession,
+                  current_unit_id: progress.next_unit_id!,
+                  messages: transitionMessages
+                };
+                
+                setChatSession(nextUnitSession);
+                saveChatSession(activity._id.toString(), nextUnitSession);
+              }
+            }
           }
         }
       }
