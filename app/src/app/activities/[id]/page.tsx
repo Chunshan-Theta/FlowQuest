@@ -211,8 +211,8 @@ export default function ActivityDetailPage() {
                     <div className="space-y-2">
                       {coursePackage.units.map((unit, index) => (
                         <div key={unit._id} className="p-2 bg-gray-50 rounded text-sm">
-                          <div className="font-medium">{index + 1}. {unit.title}</div>
-                          <div className="text-gray-600">角色：{unit.agent_role}</div>
+                          <div className="font-medium text-gray-800">{index + 1}. {unit.title}</div>
+                          <div className="text-gray-700">角色：{unit.agent_role}</div>
                         </div>
                       ))}
                     </div>
