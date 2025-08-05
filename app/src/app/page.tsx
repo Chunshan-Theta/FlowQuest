@@ -28,7 +28,8 @@ export default function Home() {
           <div className="bg-white p-6 rounded-lg shadow-md border">
             <h2 className="text-xl font-semibold mb-3 text-gray-800">📋 核心功能</h2>
             <ul className="text-sm text-gray-600 space-y-2">
-              <li>🧱 課程包與關卡管理</li>
+              <li>📚 課程包管理 (已完成)</li>
+              <li>🎯 關卡管理 (整合至課程包)</li>
               <li>🤖 AI 代理人設定 (已完成)</li>
               <li>💭 記憶模組系統</li>
               <li>📊 互動記錄與報告</li>
@@ -37,6 +38,13 @@ export default function Home() {
         </div>
         
         <div className="flex gap-4 items-center flex-col sm:flex-row">
+          <Link
+            href="/course-packages"
+            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-purple-600 text-white gap-2 hover:bg-purple-700 font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
+          >
+            📚 課程包管理
+          </Link>
+          
           <Link
             href="/agents"
             className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-green-600 text-white gap-2 hover:bg-green-700 font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"

@@ -1,5 +1,5 @@
 import { MongoClient, Db, Collection } from 'mongodb';
-import { AgentProfile } from '@/types';
+import { AgentProfile, Unit, CoursePackage } from '@/types';
 
 if (!process.env.MONGODB_URI) {
   throw new Error('請在環境變數中設置 MONGODB_URI');
@@ -45,6 +45,18 @@ export async function getDatabase(): Promise<Db> {
 export async function getAgentsCollection(): Promise<Collection<AgentProfile>> {
   const db = await getDatabase();
   return db.collection<AgentProfile>('agents');
+}
+
+// 獲取 units 集合
+export async function getUnitsCollection(): Promise<Collection<Unit>> {
+  const db = await getDatabase();
+  return db.collection<Unit>('units');
+}
+
+// 獲取 course_packages 集合
+export async function getCoursePackagesCollection(): Promise<Collection<CoursePackage>> {
+  const db = await getDatabase();
+  return db.collection<CoursePackage>('course_packages');
 }
 
 // 測試資料庫連接
