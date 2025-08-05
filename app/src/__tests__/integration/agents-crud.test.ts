@@ -9,9 +9,10 @@ import { GET as GetAgents, POST } from '@/app/api/agents/route';
 import { AgentProfile, CreateAgentProfileInput } from '@/types';
 
 // 模擬 MongoDB 集合操作
+const mockToArray = jest.fn();
 const mockCollection = {
   find: jest.fn(() => ({
-    toArray: jest.fn()
+    toArray: mockToArray
   })),
   findOne: jest.fn(),
   insertOne: jest.fn(),
@@ -55,6 +56,9 @@ describe('Agent CRUD 整合測試', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // 重置 getAgentsCollection mock 为默认行为
+    const { getAgentsCollection } = require('@/lib/mongodb');
+    getAgentsCollection.mockResolvedValue(mockCollection);
   });
 
   describe('完整的 CRUD 流程測試', () => {
@@ -93,7 +97,13 @@ describe('Agent CRUD 整合測試', () => {
       // 驗證讀取結果與創建的資料一致
       expect(readResponse.status).toBe(200);
       expect(readData.success).toBe(true);
-      expect(readData.data).toEqual(CREATED_AGENT);
+      // 注意：JSON 序列化會將 Date 對象轉換為字符串
+      expect(readData.data._id).toBe(CREATED_AGENT._id);
+      expect(readData.data.name).toBe(CREATED_AGENT.name);
+      expect(readData.data.persona).toEqual(CREATED_AGENT.persona);
+      expect(readData.data.memory_config).toEqual(CREATED_AGENT.memory_config);
+      expect(readData.data.created_at).toBe(CREATED_AGENT.created_at.toISOString());
+      expect(readData.data.updated_at).toBe(CREATED_AGENT.updated_at.toISOString());
 
       // ========== UPDATE (PUT /api/agents/[id]) ==========
       const updateInput = {
@@ -129,8 +139,8 @@ describe('Agent CRUD 整合測試', () => {
       expect(updateData.data.name).toBe(updateInput.name);
       expect(updateData.data.persona.tone).toBe(updateInput.persona.tone);
       expect(updateData.data.persona.background).toBe(CREATE_INPUT.persona.background); // 應該保持原有值
-      expect(updateData.data.created_at).toEqual(CREATED_AGENT.created_at); // 創建時間不變
-      expect(updateData.data.updated_at).not.toEqual(CREATED_AGENT.updated_at); // 更新時間改變
+      expect(updateData.data.created_at).toBe(CREATED_AGENT.created_at.toISOString()); // 創建時間不變
+      expect(updateData.data.updated_at).not.toBe(CREATED_AGENT.updated_at.toISOString()); // 更新時間改變
 
       // ========== DELETE (DELETE /api/agents/[id]) ==========
       mockCollection.findOne.mockResolvedValue(updatedAgent);
@@ -147,7 +157,12 @@ describe('Agent CRUD 整合測試', () => {
       // 驗證刪除結果
       expect(deleteResponse.status).toBe(200);
       expect(deleteData.success).toBe(true);
-      expect(deleteData.data).toEqual(updatedAgent);
+      expect(deleteData.data._id).toBe(updatedAgent._id);
+      expect(deleteData.data.name).toBe(updatedAgent.name);
+      expect(deleteData.data.persona).toEqual(updatedAgent.persona);
+      expect(deleteData.data.memory_config).toEqual(updatedAgent.memory_config);
+      expect(deleteData.data.created_at).toBe(updatedAgent.created_at.toISOString());
+      expect(deleteData.data.updated_at).toBe(updatedAgent.updated_at.toISOString());
       expect(deleteData.message).toBe('成功刪除 Agent');
     });
 
@@ -155,7 +170,7 @@ describe('Agent CRUD 整合測試', () => {
       const agents = [CREATED_AGENT];
 
       // 測試獲取列表
-      mockCollection.find().toArray.mockResolvedValue(agents);
+      mockToArray.mockResolvedValue(agents);
       const listRequest = new NextRequest('http://localhost:3000/api/agents');
       const listResponse = await GetAgents(listRequest);
       const listData = await listResponse.json();
@@ -168,6 +183,9 @@ describe('Agent CRUD 整合測試', () => {
       const singleData = await singleResponse.json();
 
       // 驗證列表中的項目與單項獲取的結果一致
+      expect(listData.data).toBeDefined();
+      expect(Array.isArray(listData.data)).toBe(true);
+      expect(listData.data.length).toBe(1);
       expect(listData.data[0]).toEqual(singleData.data);
     });
   });

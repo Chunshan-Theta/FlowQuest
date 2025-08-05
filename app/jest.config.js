@@ -7,6 +7,10 @@ const config = {
     '**/__tests__/**/*.ts',
     '**/?(*.)+(spec|test).ts'
   ],
+  testPathIgnorePatterns: [
+    '.*\\.d\\.ts$',
+    'setup\\.ts$'
+  ],
   transform: {
     '^.+\\.ts$': 'ts-jest',
   },

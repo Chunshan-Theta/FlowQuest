@@ -8,9 +8,10 @@ import { GET, POST } from '@/app/api/agents/route';
 import { AgentProfile, CreateAgentProfileInput } from '@/types';
 
 // 模擬 MongoDB 集合操作
+const mockToArray = jest.fn();
 const mockCollection = {
   find: jest.fn(() => ({
-    toArray: jest.fn()
+    toArray: mockToArray
   })),
   insertOne: jest.fn(),
 };
@@ -110,12 +111,15 @@ const MOCK_AGENTS_RESPONSE = [
 describe('Agents Collection API Tests', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // 重置 getAgentsCollection mock 为默认行为
+    const { getAgentsCollection } = require('@/lib/mongodb');
+    getAgentsCollection.mockResolvedValue(mockCollection);
   });
 
   describe('GET /api/agents', () => {
     test('應該成功獲取所有 agents', async () => {
       // 準備
-      mockCollection.find().toArray.mockResolvedValue(MOCK_AGENTS);
+      mockToArray.mockResolvedValue(MOCK_AGENTS);
       const request = new NextRequest('http://localhost:3000/api/agents');
 
       // 執行
@@ -134,7 +138,7 @@ describe('Agents Collection API Tests', () => {
       // 準備
       const filteredAgents = [MOCK_AGENTS[0]];
       const filteredAgentsResponse = [MOCK_AGENTS_RESPONSE[0]];
-      mockCollection.find().toArray.mockResolvedValue(filteredAgents);
+      mockToArray.mockResolvedValue(filteredAgents);
       const request = new NextRequest('http://localhost:3000/api/agents?name=代理人A');
 
       // 執行
@@ -152,7 +156,7 @@ describe('Agents Collection API Tests', () => {
 
     test('應該返回空陣列當沒有找到 agents', async () => {
       // 準備
-      mockCollection.find().toArray.mockResolvedValue([]);
+      mockToArray.mockResolvedValue([]);
       const request = new NextRequest('http://localhost:3000/api/agents');
 
       // 執行
@@ -169,7 +173,8 @@ describe('Agents Collection API Tests', () => {
     test('應該處理資料庫連接錯誤', async () => {
       // 準備
       const errorMessage = 'Database connection failed';
-      mockCollection.find().toArray.mockRejectedValue(new Error(errorMessage));
+      const { getAgentsCollection } = require('@/lib/mongodb');
+      getAgentsCollection.mockRejectedValue(new Error(errorMessage));
       const request = new NextRequest('http://localhost:3000/api/agents');
 
       // 執行
@@ -268,7 +273,8 @@ describe('Agents Collection API Tests', () => {
     test('應該處理資料庫連接錯誤', async () => {
       // 準備
       const errorMessage = 'Database connection failed';
-      mockCollection.insertOne.mockRejectedValue(new Error(errorMessage));
+      const { getAgentsCollection } = require('@/lib/mongodb');
+      getAgentsCollection.mockRejectedValue(new Error(errorMessage));
       const request = new NextRequest('http://localhost:3000/api/agents', {
         method: 'POST',
         body: JSON.stringify(MOCK_CREATE_INPUT),
@@ -290,7 +296,7 @@ describe('Agents Collection API Tests', () => {
   describe('輸入輸出一致性測試', () => {
     test('GET 操作應該返回 AgentProfile 陣列，每個元素都有完整結構', async () => {
       // 準備
-      mockCollection.find().toArray.mockResolvedValue(MOCK_AGENTS);
+      mockToArray.mockResolvedValue(MOCK_AGENTS);
       const request = new NextRequest('http://localhost:3000/api/agents');
 
       // 執行
@@ -393,7 +399,7 @@ describe('Agents Collection API Tests', () => {
 
     test('響應格式應該保持一致', async () => {
       // 測試 GET 響應格式
-      mockCollection.find().toArray.mockResolvedValue(MOCK_AGENTS);
+      mockToArray.mockResolvedValue(MOCK_AGENTS);
       const getRequest = new NextRequest('http://localhost:3000/api/agents');
       const getResponse = await GET(getRequest);
       const getData = await getResponse.json();

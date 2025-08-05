@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
       message: '成功獲取 Agent 列表'
     });
   } catch (error) {
-    console.error('獲取 Agent 列表錯誤:', error);
+    // console.error('獲取 Agent 列表錯誤:', error);
     return NextResponse.json({
       success: false,
       error: '獲取 Agent 列表失敗',
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
       message: '成功創建 Agent'
     }, { status: 201 });
   } catch (error) {
-    console.error('創建 Agent 錯誤:', error);
+    // console.error('創建 Agent 錯誤:', error);
     return NextResponse.json({
       success: false,
       error: '創建 Agent 失敗',
