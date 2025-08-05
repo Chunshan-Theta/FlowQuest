@@ -7,8 +7,8 @@
 // 狀態相關常數
 // ================================
 export const ACTIVITY_STATUS = {
-  IN_PROGRESS: 'in_progress',
-  COMPLETED: 'completed',
+  ONLINE: 'online',
+  OFFLINE: 'offline',
 } as const;
 
 export const MEMORY_TYPE = {

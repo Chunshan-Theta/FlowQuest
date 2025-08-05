@@ -7,14 +7,14 @@ import { MemoryConfig } from './agent';
 // ================================
 // Activity 活動實例
 // ================================
-export type ActivityStatus = "in_progress" | "completed";
+export type ActivityStatus = "online" | "offline";
 
 export interface Activity {
   _id: ObjectId;
-  user_id: ObjectId;
+  name: string;
   course_package_id: ObjectId;
   agent_profile_id: ObjectId;
-  current_unit_id: ObjectId;
+  current_unit_id?: ObjectId; // 改為可選
   status: ActivityStatus;
   hot_memory_ids: MemoryConfig[];
   start_time: Date;
@@ -29,7 +29,6 @@ export type UpdateActivityInput = Partial<Omit<Activity, '_id'>> & { _id: Object
 
 // 活動查詢過濾器
 export interface ActivityFilter {
-  user_id?: ObjectId;
   status?: ActivityStatus;
   start_after?: Date;
   start_before?: Date;
