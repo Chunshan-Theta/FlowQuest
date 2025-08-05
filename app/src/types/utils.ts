@@ -300,9 +300,14 @@ export function validateInteractionLog(data: Partial<InteractionLog>): string[] 
  * 生成新的 ObjectId
  */
 export function generateObjectId(): ObjectId {
-  // 使用 MongoDB ObjectId 生成真正的 ObjectId
-  const { ObjectId: MongoObjectId } = require('mongodb');
-  return new MongoObjectId().toString();
+  // 生成類似 MongoDB ObjectId 的 24 字符十六進制字符串
+  // 格式：timestamp(8) + machineId(6) + processId(4) + counter(6)
+  const timestamp = Math.floor(Date.now() / 1000).toString(16).padStart(8, '0');
+  const machineId = Math.random().toString(16).slice(2, 8).padStart(6, '0');
+  const processId = Math.random().toString(16).slice(2, 6).padStart(4, '0');
+  const counter = Math.random().toString(16).slice(2, 8).padStart(6, '0');
+  
+  return timestamp + machineId + processId + counter;
 }
 
 /**

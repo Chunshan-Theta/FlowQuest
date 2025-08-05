@@ -13,3 +13,13 @@ yarn-error.log*
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Test files
+**/*.test.ts
+**/*.test.tsx
+**/*.test.js
+**/*.test.jsx
+src/__tests__/
+jest.config.js
+.nyc_output/
+coverage/
