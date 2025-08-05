@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Activity, CreateActivityInput, ApiResponse, AgentProfile, CoursePackage, ObjectId } from '@/types';
 import { useActivities } from '@/hooks/useActivities';
 import { useAgents } from '@/hooks/useAgents';
@@ -138,6 +139,7 @@ function ActivityForm({ activity, onSubmit, onCancel, isSubmitting = false }: Ac
 }
 
 export default function ActivitiesPage() {
+  const router = useRouter();
   const { activities, loading, error, fetchActivities, createActivity, updateActivity, deleteActivity, setError } = useActivities();
   const [showForm, setShowForm] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
@@ -147,6 +149,11 @@ export default function ActivitiesPage() {
   useEffect(() => {
     fetchActivities();
   }, [fetchActivities]);
+
+  // 點擊活動卡片查看詳情
+  const handleActivityClick = (activityId: string) => {
+    router.push(`/activities/${activityId}`);
+  };
 
   // 創建或更新活動
   const handleSubmit = async (data: CreateActivityInput) => {
@@ -268,51 +275,67 @@ export default function ActivitiesPage() {
 
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {filteredActivities.map((activity) => (
-                <div key={activity._id} className="bg-white rounded-lg shadow-md p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-gray-800 mb-2">{activity.name}</h3>
-                      <div className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(activity.status)}`}>
-                        {getStatusText(activity.status)}
+                <div key={activity._id} className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-200">
+                  {/* 可點擊的卡片內容區域 */}
+                  <div 
+                    className="p-6 cursor-pointer"
+                    onClick={() => handleActivityClick(activity._id)}
+                  >
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex-1">
+                        <h3 className="text-lg font-semibold text-gray-800 mb-2 hover:text-blue-600 transition-colors">
+                          {activity.name}
+                        </h3>
+                        <div className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(activity.status)}`}>
+                          {getStatusText(activity.status)}
+                        </div>
                       </div>
                     </div>
-                    <div className="flex gap-2">
+
+                    <div className="space-y-2 text-sm">
+                      <div>
+                        <span className="font-medium text-gray-600">Agent ID：</span>
+                        <span className="text-gray-800">{activity.agent_profile_id}</span>
+                      </div>
+                      <div>
+                        <span className="font-medium text-gray-600">課程包 ID：</span>
+                        <span className="text-gray-800">{activity.course_package_id}</span>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 pt-4 border-t border-gray-200 text-xs text-gray-500">
+                      <div>開始：{new Date(activity.start_time).toLocaleString('zh-TW')}</div>
+                      {activity.end_time && (
+                        <div>結束：{new Date(activity.end_time).toLocaleString('zh-TW')}</div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 操作按鈕區域 - 不在可點擊區域內 */}
+                  <div className="px-6 pb-4">
+                    <div className="flex gap-2 justify-end">
                       <button
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation(); // 防止觸發卡片點擊
                           setEditingActivity(activity);
                           setShowForm(true);
                         }}
-                        className="text-blue-600 hover:text-blue-800"
+                        className="text-blue-600 hover:text-blue-800 p-1"
                         title="編輯"
                       >
                         ✏️
                       </button>
                       <button
-                        onClick={() => handleDelete(activity._id)}
-                        className="text-red-600 hover:text-red-800"
+                        onClick={(e) => {
+                          e.stopPropagation(); // 防止觸發卡片點擊
+                          handleDelete(activity._id);
+                        }}
+                        className="text-red-600 hover:text-red-800 p-1"
                         title="刪除"
                       >
                         🗑️
                       </button>
                     </div>
-                  </div>
-
-                  <div className="space-y-2 text-sm">
-                    <div>
-                      <span className="font-medium text-gray-600">Agent ID：</span>
-                      <span className="text-gray-800">{activity.agent_profile_id}</span>
-                    </div>
-                    <div>
-                      <span className="font-medium text-gray-600">課程包 ID：</span>
-                      <span className="text-gray-800">{activity.course_package_id}</span>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 pt-4 border-t border-gray-200 text-xs text-gray-500">
-                    <div>開始：{new Date(activity.start_time).toLocaleString('zh-TW')}</div>
-                    {activity.end_time && (
-                      <div>結束：{new Date(activity.end_time).toLocaleString('zh-TW')}</div>
-                    )}
                   </div>
                 </div>
               ))}

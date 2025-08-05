@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Activity, CreateActivityInput, ActivityFilter, ApiResponse, isValidObjectId } from '@/types';
+import { Activity, CreateActivityInput, ActivityFilter, ApiResponse, isValidObjectId, generateObjectId } from '@/types';
 import { getActivitiesCollection } from '@/lib/mongodb';
 
 // GET /api/activities - 獲取活動列表
@@ -68,21 +68,22 @@ export async function POST(request: NextRequest) {
     }
 
     // 準備新活動資料
-    const newActivity = {
+    const newActivity: Activity = {
+      _id: generateObjectId(),
       ...activityData,
+      hot_memory_ids: [], // 確保初始化為空陣列
       start_time: new Date(),
     };
 
-    const result = await collection.insertOne(newActivity as any);
-    const createdActivity = await collection.findOne({ _id: result.insertedId });
+    const result = await collection.insertOne(newActivity);
     
-    if (!createdActivity) {
-      throw new Error('Failed to retrieve created activity');
+    if (!result.acknowledged) {
+      throw new Error('插入資料庫失敗');
     }
     
     const response: ApiResponse<Activity> = {
       success: true,
-      data: createdActivity,
+      data: newActivity,
     };
     
     return NextResponse.json(response, { status: 201 });

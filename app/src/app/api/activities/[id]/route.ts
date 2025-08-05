@@ -3,17 +3,18 @@ import { Activity, UpdateActivityInput, ApiResponse, isValidObjectId } from '@/t
 import { getActivitiesCollection } from '@/lib/mongodb';
 
 interface RouteParams {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 // GET /api/activities/[id] - 獲取單一活動
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const collection = await getActivitiesCollection();
+    const { id } = await params;
     
-    if (!isValidObjectId(params.id)) {
+    if (!isValidObjectId(id)) {
       const response: ApiResponse<Activity> = {
         success: false,
         error: 'ID 格式無效',
@@ -21,7 +22,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json(response, { status: 400 });
     }
     
-    const activity = await collection.findOne({ _id: params.id });
+    const activity = await collection.findOne({ _id: id });
     
     if (!activity) {
       const response: ApiResponse<Activity> = {
@@ -51,8 +52,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
     const collection = await getActivitiesCollection();
+    const { id } = await params;
     
-    if (!isValidObjectId(params.id)) {
+    if (!isValidObjectId(id)) {
       const response: ApiResponse<Activity> = {
         success: false,
         error: 'ID 格式無效',
@@ -67,7 +69,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     const { _id, ...dataToUpdate } = updateData;
     
     const result = await collection.updateOne(
-      { _id: params.id },
+      { _id: id },
       { $set: dataToUpdate }
     );
     
@@ -79,7 +81,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json(response, { status: 404 });
     }
     
-    const updatedActivity = await collection.findOne({ _id: params.id });
+    const updatedActivity = await collection.findOne({ _id: id });
     
     const response: ApiResponse<Activity> = {
       success: true,
@@ -101,8 +103,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     const collection = await getActivitiesCollection();
+    const { id } = await params;
     
-    if (!isValidObjectId(params.id)) {
+    if (!isValidObjectId(id)) {
       const response: ApiResponse<Activity> = {
         success: false,
         error: 'ID 格式無效',
@@ -110,7 +113,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json(response, { status: 400 });
     }
     
-    const result = await collection.deleteOne({ _id: params.id });
+    const result = await collection.deleteOne({ _id: id });
     
     if (result.deletedCount === 0) {
       const response: ApiResponse<Activity> = {

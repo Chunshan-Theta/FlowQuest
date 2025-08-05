@@ -16,7 +16,7 @@ export interface Activity {
   agent_profile_id: ObjectId;
   current_unit_id?: ObjectId; // 改為可選
   status: ActivityStatus;
-  hot_memory_ids: MemoryConfig[];
+  hot_memory_ids?: MemoryConfig[]; // 改為可選
   start_time: Date;
   end_time?: Date; // nullable
 }
