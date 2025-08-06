@@ -3,7 +3,6 @@
  */
 
 import { ObjectId } from './base';
-import { AgentMemory } from './memory';
 
 // ================================
 // Activity 活動實例
@@ -17,7 +16,7 @@ export interface Activity {
   agent_profile_id: ObjectId;
   current_unit_id?: ObjectId;
   status: ActivityStatus;
-  memories?: AgentMemory[];
+  memory_ids?: ObjectId[];
   created_at: Date;
   updated_at: Date;
 }

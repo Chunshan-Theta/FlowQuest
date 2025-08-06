@@ -19,7 +19,10 @@ export interface AgentProfile {
   _id: ObjectId;
   name: string;
   persona: AgentPersona;
-  memories?: AgentMemory[];
+  memory_config?: {
+    memory_ids: AgentMemory[];
+    cold_memory_ids: AgentMemory[];
+  };
   created_at: Date;
   updated_at: Date;
 }

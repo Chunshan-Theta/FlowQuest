@@ -158,18 +158,34 @@ export function validateAgentProfile(data: Partial<AgentProfile>): string[] {
   }
   
   if (data.memory_config) {
-    // 驗證記憶配置陣列
-    data.memory_config.forEach((memory, index) => {
-      if (memory._id && !isValidObjectId(memory._id)) {
-        errors.push(`第 ${index + 1} 個記憶 ID 格式無效`);
-      }
-      if (memory.agent_id && !isValidObjectId(memory.agent_id)) {
-        errors.push(`第 ${index + 1} 個記憶的 agent_id 格式無效`);
-      }
-      if (memory.created_by_user_id && !isValidObjectId(memory.created_by_user_id)) {
-        errors.push(`第 ${index + 1} 個記憶的 created_by_user_id 格式無效`);
-      }
-    });
+    // 驗證記憶配置中的 memory_ids 陣列
+    if (data.memory_config.memory_ids) {
+      data.memory_config.memory_ids.forEach((memory: any, index: number) => {
+        if (memory._id && !isValidObjectId(memory._id)) {
+          errors.push(`第 ${index + 1} 個記憶 ID 格式無效`);
+        }
+        if (memory.agent_id && !isValidObjectId(memory.agent_id)) {
+          errors.push(`第 ${index + 1} 個記憶的 agent_id 格式無效`);
+        }
+        if (memory.created_by_user_id && !isValidObjectId(memory.created_by_user_id)) {
+          errors.push(`第 ${index + 1} 個記憶的 created_by_user_id 格式無效`);
+        }
+      });
+    }
+    // 驗證記憶配置中的 cold_memory_ids 陣列
+    if (data.memory_config.cold_memory_ids) {
+      data.memory_config.cold_memory_ids.forEach((memory: any, index: number) => {
+        if (memory._id && !isValidObjectId(memory._id)) {
+          errors.push(`第 ${index + 1} 個冷記憶 ID 格式無效`);
+        }
+        if (memory.agent_id && !isValidObjectId(memory.agent_id)) {
+          errors.push(`第 ${index + 1} 個冷記憶的 agent_id 格式無效`);
+        }
+        if (memory.created_by_user_id && !isValidObjectId(memory.created_by_user_id)) {
+          errors.push(`第 ${index + 1} 個冷記憶的 created_by_user_id 格式無效`);
+        }
+      });
+    }
   }
   
   return errors;
@@ -237,7 +253,7 @@ export function validateActivity(data: Partial<Activity>): string[] {
   }
   
   if (data.memory_ids) {
-    data.memory_ids.forEach((memoryId, index) => {
+    data.memory_ids.forEach((memoryId: any, index: number) => {
       if (!isValidObjectId(memoryId)) {
         errors.push(`第 ${index + 1} 個記憶 ID 格式無效`);
       }
