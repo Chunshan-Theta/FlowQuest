@@ -3,19 +3,19 @@ import Link from "next/link";
 
 export default function Home() {
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <div className="flex flex-col items-center gap-4">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+    <div className="min-h-screen bg-gray-50 py-8 px-4">
+      <div className="max-w-6xl mx-auto">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">
             FlowQuest
           </h1>
-          <p className="text-lg text-gray-600 text-center max-w-2xl">
+          <p className="text-gray-600">
             情境式對話訓練平台 - 透過 AI 代理人進行互動式學習體驗
           </p>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl">
-          <div className="bg-white p-6 rounded-lg shadow-md border">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <div className="bg-white p-6 rounded-lg shadow-md">
             <h2 className="text-xl font-semibold mb-3 text-gray-800">🏗️ 專案架構</h2>
             <ul className="text-sm text-gray-600 space-y-2">
               <li>✅ Next.js 15 with App Router</li>
@@ -25,7 +25,7 @@ export default function Home() {
             </ul>
           </div>
           
-          <div className="bg-white p-6 rounded-lg shadow-md border">
+          <div className="bg-white p-6 rounded-lg shadow-md">
             <h2 className="text-xl font-semibold mb-3 text-gray-800">📋 核心功能</h2>
             <ul className="text-sm text-gray-600 space-y-2">
               <li>📚 課程包管理 (已完成)</li>
@@ -37,45 +37,46 @@ export default function Home() {
           </div>
         </div>
         
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <Link
-            href="/course-packages"
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-purple-600 text-white gap-2 hover:bg-purple-700 font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-          >
-            📚 課程包管理
-          </Link>
-          
-          <Link
-            href="/agents"
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-green-600 text-white gap-2 hover:bg-green-700 font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-          >
-            🤖 Agent 管理
-          </Link>
-          
-          <Link
-            href="/activities"
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-green-600 text-white gap-2 hover:bg-green-700 font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-          >
-            活動管理
-          </Link>
-          
-         
+        <div className="bg-white p-6 rounded-lg shadow-md">
+          <h2 className="text-xl font-semibold mb-4 text-gray-800">快速導航</h2>
+          <div className="flex gap-4 items-center flex-col sm:flex-row">
+            <Link
+              href="/course-packages"
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            >
+              📚 課程包管理
+            </Link>
+            
+            <Link
+              href="/agents"
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            >
+              🤖 Agent 管理
+            </Link>
+            
+            <Link
+              href="/activities"
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            >
+              🎯 活動管理
+            </Link>
+          </div>
         </div>
         
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left mt-8">
-          <li className="mb-2 tracking-[-.01em]">
-            已完成基本的 TypeScript 類型定義在{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/types/
-            </code>
-          </li>
-          <li className="tracking-[-.01em]">
-            點擊上方按鈕查看類型系統演示
-          </li>
-        </ol>
-
-      </main>
-
+        <div className="mt-8 text-center">
+          <ol className="font-mono list-inside list-decimal text-sm text-gray-600 space-y-2">
+            <li>
+              已完成基本的 TypeScript 類型定義在{" "}
+              <code className="bg-gray-100 font-mono font-semibold px-1 py-0.5 rounded">
+                src/types/
+              </code>
+            </li>
+            <li>
+              點擊上方按鈕查看類型系統演示
+            </li>
+          </ol>
+        </div>
+      </div>
     </div>
   );
 }
