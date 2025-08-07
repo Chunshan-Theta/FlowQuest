@@ -2,12 +2,13 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Activity, AgentProfile, CoursePackage, ChatSession, ChatMessage, OpenAIChatMessage, Unit } from '@/types';
+import { Activity, AgentProfile, CoursePackage, ChatSession, ChatMessage, OpenAIChatMessage, Unit, AgentMemory } from '@/types';
 import { useActivities } from '@/hooks/useActivities';
 import { useAgents } from '@/hooks/useAgents';
 import { useCoursePackages } from '@/hooks/useCoursePackages';
 import { useChat } from '@/hooks/useChat';
 import { useUnitProgress } from '@/hooks/useUnitProgress';
+import { useMemoryManager } from '@/hooks/useMemoryManager';
 
 export default function ActivityChatPage() {
   const params = useParams();
@@ -17,6 +18,7 @@ export default function ActivityChatPage() {
   const { fetchCoursePackage } = useCoursePackages();
   const { loadChatSession, sendChatToOpenAI, restartChat, saveChatSession, isLoading, error } = useChat();
   const { checkUnitProgress, isChecking } = useUnitProgress();
+  const { state: memoryState, actions: memoryActions } = useMemoryManager();
 
   const [activity, setActivity] = useState<Activity | null>(null);
   const [agent, setAgent] = useState<AgentProfile | null>(null);
@@ -29,8 +31,8 @@ export default function ActivityChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // 生成系統提示詞，包含 agent 和關卡資訊
-  const generateSystemPrompt = (agent: AgentProfile | null, currentUnit: Unit | null, coursePackage: CoursePackage | null): string => {
+  // 生成系統提示詞，包含 agent、關卡資訊和相關記憶
+  const generateSystemPrompt = (agent: AgentProfile | null, currentUnit: Unit | null, coursePackage: CoursePackage | null, context: string = ''): string => {
     if (!agent) return '你是一個學習助手，協助學習者完成學習任務。';
 
     let prompt = `你是 ${agent.name}，`;
@@ -89,6 +91,20 @@ export default function ActivityChatPage() {
       }
     }
 
+    // 添加相關記憶
+    if (context) {
+      const relevantMemories = memoryActions.getRelevantMemories(context, 5);
+      if (relevantMemories.length > 0) {
+        prompt += `\n\n相關記憶：`;
+        relevantMemories.forEach((memory, index) => {
+          prompt += `\n${index + 1}. ${memory.content}`;
+          if (memory.tags.length > 0) {
+            prompt += ` (標籤: ${memory.tags.join(', ')})`;
+          }
+        });
+      }
+    }
+
     // 添加角色指引
     prompt += `\n\n請確定角色立場在進行回應。`;
 
@@ -124,6 +140,11 @@ export default function ActivityChatPage() {
         
         setAgent(agentData);
         setCoursePackage(coursePackageData);
+
+        // 初始化記憶管理系統
+        if (agentData.memory_config?.memory_ids) {
+          memoryActions.initializeMemories(agentData.memory_config.memory_ids);
+        }
 
         console.log('活動資料載入成功:', activityData);
         console.log('代理人資料載入成功:', agentData);
@@ -200,12 +221,14 @@ export default function ActivityChatPage() {
       };
 
       // 準備 OpenAI 的訊息格式
-      const systemPrompt = generateSystemPrompt(agent, currentUnit || null, coursePackage);
+      const systemPrompt = generateSystemPrompt(agent, currentUnit || null, coursePackage, message);
       
       // 調試：輸出系統提示內容
       console.log('=== 系統提示 ===');
       console.log(systemPrompt);
       console.log('================');
+      
+
       
       const openAIMessages: any[] = [
         {
@@ -246,6 +269,35 @@ export default function ActivityChatPage() {
         
         setChatSession(updatedSession);
         saveChatSession(activity._id.toString(), updatedSession);
+
+        // 從 LLM 回應更新記憶
+        if (agent && activity) {
+          console.log('=== LLM 回應記憶更新前 ===');
+          console.log('熱記憶:', memoryState.hotMemories);
+          console.log('冷記憶:', memoryState.coldMemories);
+          
+          await memoryActions.updateMemoriesFromResponse(
+            response, 
+            message, 
+            agent._id.toString(), 
+            'default_user' // 暫時使用預設用戶ID
+          );
+          
+          console.log('=== LLM 回應記憶更新後 ===');
+          console.log('熱記憶數量:', memoryState.hotMemories);
+          console.log('冷記憶數量:', memoryState.coldMemories);
+        }
+        
+        // 整合記憶，確保熱記憶數量維持在限制內
+        console.log('=== 記憶整合前 ===');
+        console.log('熱記憶數量:', memoryState.hotMemories);
+        console.log('冷記憶數量:', memoryState.coldMemories);
+        
+        memoryActions.consolidateMemories();
+        
+        console.log('=== 記憶整合後 ===');
+        console.log('熱記憶數量:', memoryState.hotMemories);
+        console.log('冷記憶數量:', memoryState.coldMemories);
 
         // 檢查單元進度
         if (currentUnit) {
@@ -458,40 +510,57 @@ export default function ActivityChatPage() {
             </div>
           </div>
           
-          {/* 進度指示器 */}
-          {coursePackage.units.length > 0 && chatSession && (
-            <div className="flex items-center space-x-2">
-              <span className="text-sm text-gray-600">進度:</span>
-              <div className="flex space-x-1">
-                {getSortedUnits().map((unit, index) => {
-                  const isCurrent = unit._id.toString() === chatSession.current_unit_id;
-                  const isCompleted = getSortedUnits().findIndex(u => 
-                    u._id.toString() === chatSession.current_unit_id
-                  ) > index;
-                  
-                  return (
-                    <div
-                      key={unit._id.toString()}
-                      className={`w-3 h-3 rounded-full ${
-                        isCompleted 
-                          ? 'bg-green-500' 
-                          : isCurrent 
-                            ? 'bg-blue-500' 
-                            : 'bg-gray-300'
-                      }`}
-                      title={`${unit.order}. ${unit.title}`}
-                    />
-                  );
-                })}
+          {/* 進度指示器和記憶狀態 */}
+          <div className="flex items-center space-x-4">
+            {/* 進度指示器 */}
+            {coursePackage.units.length > 0 && chatSession && (
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-gray-600">進度:</span>
+                <div className="flex space-x-1">
+                  {getSortedUnits().map((unit, index) => {
+                    const isCurrent = unit._id.toString() === chatSession.current_unit_id;
+                    const isCompleted = getSortedUnits().findIndex(u => 
+                      u._id.toString() === chatSession.current_unit_id
+                    ) > index;
+                    
+                    return (
+                      <div
+                        key={unit._id.toString()}
+                        className={`w-3 h-3 rounded-full ${
+                          isCompleted 
+                            ? 'bg-green-500' 
+                            : isCurrent 
+                              ? 'bg-blue-500' 
+                              : 'bg-gray-300'
+                        }`}
+                        title={`${unit.order}. ${unit.title}`}
+                      />
+                    );
+                  })}
+                </div>
               </div>
-              <button
-                onClick={handleRestartChat}
-                className="ml-4 px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
-              >
-                重新開始
-              </button>
+            )}
+            
+            {/* 記憶狀態 */}
+            <div className="flex items-center space-x-2" style={{ display: 'none' }}>
+              <span className="text-sm text-gray-600">記憶:</span>
+              <div className="flex items-center space-x-1">
+                <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded">
+                  熱: {memoryState.hotMemories.length}/{memoryState.maxHotMemories}
+                </span>
+                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                  冷: {memoryState.coldMemories.length}
+                </span>
+              </div>
             </div>
-          )}
+            
+            <button
+              onClick={handleRestartChat}
+              className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+            >
+              重新開始
+            </button>
+          </div>
         </div>
       </div>
 

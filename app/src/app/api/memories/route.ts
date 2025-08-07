@@ -1,46 +1,193 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
-import { AgentMemory } from '@/types';
+import { AgentMemory, ApiResponse, DEFAULT_CONFIG } from '@/types';
+import { ObjectId } from 'mongodb';
 
-export async function GET() {
+// GET /api/memories - 獲取所有記憶
+export async function GET(request: NextRequest) {
   try {
     const db = await getDatabase();
-    const memories = await db.collection('memories').find({}).toArray();
+    const collection = db.collection('memories');
     
-    return NextResponse.json({
+    const memories = await collection.find({}).toArray();
+    
+    const response: ApiResponse<AgentMemory[]> = {
       success: true,
-      data: memories as unknown as AgentMemory[]
-    });
+      data: memories as unknown as AgentMemory[],
+      message: '記憶獲取成功'
+    };
+    
+    return NextResponse.json(response);
   } catch (error) {
-    console.error('Error fetching memories:', error);
-    return NextResponse.json(
-      { success: false, error: 'Failed to fetch memories' },
-      { status: 500 }
-    );
+    console.error('獲取記憶失敗:', error);
+    const response: ApiResponse<null> = {
+      success: false,
+      error: '獲取記憶失敗',
+      message: '內部伺服器錯誤'
+    };
+    return NextResponse.json(response, { status: 500 });
   }
 }
 
+// POST /api/memories - 創建新記憶
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const db = await getDatabase();
+    const { agent_id, type, content, tags, created_by_user_id } = body;
     
-    const memory = {
-      ...body,
+    // 驗證必填欄位
+    if (!agent_id || !type || !content || !created_by_user_id) {
+      const response: ApiResponse<null> = {
+        success: false,
+        error: '缺少必填欄位',
+        message: '請提供 agent_id、type、content 和 created_by_user_id'
+      };
+      return NextResponse.json(response, { status: 400 });
+    }
+    
+    // 驗證記憶類型
+    if (!['hot', 'cold'].includes(type)) {
+      const response: ApiResponse<null> = {
+        success: false,
+        error: '無效的記憶類型',
+        message: '記憶類型必須是 hot 或 cold'
+      };
+      return NextResponse.json(response, { status: 400 });
+    }
+    
+    // 驗證標籤數量
+    if (tags && tags.length > DEFAULT_CONFIG.MEMORY.MAX_TAGS_PER_MEMORY) {
+      const response: ApiResponse<null> = {
+        success: false,
+        error: '標籤數量超過限制',
+        message: `標籤數量不能超過 ${DEFAULT_CONFIG.MEMORY.MAX_TAGS_PER_MEMORY} 個`
+      };
+      return NextResponse.json(response, { status: 400 });
+    }
+    
+    const db = await getDatabase();
+    const collection = db.collection('memories');
+    
+    const newMemory = {
+      _id: new ObjectId(),
+      agent_id: agent_id.toString(),
+      type,
+      content: content.trim(),
+      tags: tags || [],
+      created_by_user_id: created_by_user_id.toString(),
       created_at: new Date()
     };
     
-    const result = await db.collection('memories').insertOne(memory);
+    await collection.insertOne(newMemory);
     
-    return NextResponse.json({
+    const response: ApiResponse<AgentMemory> = {
       success: true,
-      data: { ...memory, _id: result.insertedId }
-    });
+      data: {
+        ...newMemory,
+        _id: newMemory._id.toString()
+      } as AgentMemory,
+      message: '記憶創建成功'
+    };
+    
+    return NextResponse.json(response, { status: 201 });
   } catch (error) {
-    console.error('Error creating memory:', error);
-    return NextResponse.json(
-      { success: false, error: 'Failed to create memory' },
-      { status: 500 }
-    );
+    console.error('創建記憶失敗:', error);
+    const response: ApiResponse<null> = {
+      success: false,
+      error: '創建記憶失敗',
+      message: '內部伺服器錯誤'
+    };
+    return NextResponse.json(response, { status: 500 });
+  }
+}
+
+// PUT /api/memories - 批量更新記憶
+export async function PUT(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { memories } = body;
+    
+    if (!Array.isArray(memories)) {
+      const response: ApiResponse<null> = {
+        success: false,
+        error: '無效的記憶資料格式',
+        message: 'memories 必須是陣列'
+      };
+      return NextResponse.json(response, { status: 400 });
+    }
+    
+    const db = await getDatabase();
+    const collection = db.collection('memories');
+    
+    const updatePromises = memories.map(async (memory: AgentMemory) => {
+      const { _id, ...updateData } = memory;
+      return collection.updateOne(
+        { _id: new ObjectId(_id) },
+        { $set: updateData }
+      );
+    });
+    
+    await Promise.all(updatePromises);
+    
+    const response: ApiResponse<null> = {
+      success: true,
+      message: '記憶更新成功'
+    };
+    
+    return NextResponse.json(response);
+  } catch (error) {
+    console.error('更新記憶失敗:', error);
+    const response: ApiResponse<null> = {
+      success: false,
+      error: '更新記憶失敗',
+      message: '內部伺服器錯誤'
+    };
+    return NextResponse.json(response, { status: 500 });
+  }
+}
+
+// DELETE /api/memories - 刪除記憶
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+    
+    if (!id) {
+      const response: ApiResponse<null> = {
+        success: false,
+        error: '缺少記憶 ID',
+        message: '請提供要刪除的記憶 ID'
+      };
+      return NextResponse.json(response, { status: 400 });
+    }
+    
+    const db = await getDatabase();
+    const collection = db.collection('memories');
+    
+    const result = await collection.deleteOne({ _id: new ObjectId(id) });
+    
+    if (result.deletedCount === 0) {
+      const response: ApiResponse<null> = {
+        success: false,
+        error: '記憶不存在',
+        message: '找不到指定的記憶'
+      };
+      return NextResponse.json(response, { status: 404 });
+    }
+    
+    const response: ApiResponse<null> = {
+      success: true,
+      message: '記憶刪除成功'
+    };
+    
+    return NextResponse.json(response);
+  } catch (error) {
+    console.error('刪除記憶失敗:', error);
+    const response: ApiResponse<null> = {
+      success: false,
+      error: '刪除記憶失敗',
+      message: '內部伺服器錯誤'
+    };
+    return NextResponse.json(response, { status: 500 });
   }
 } 
