@@ -21,7 +21,6 @@ export interface AgentProfile {
   persona: AgentPersona;
   memory_config?: {
     memory_ids: AgentMemory[];
-    cold_memory_ids: AgentMemory[];
   };
   created_at: Date;
   updated_at: Date;

@@ -36,8 +36,7 @@ const MOCK_CREATE_INPUT: CreateAgentProfileInput = {
     voice: '溫暖親切的聲音'
   },
   memory_config: {
-    memory_ids: [],
-    cold_memory_ids: []
+    memory_ids: []
   }
 };
 
@@ -51,8 +50,7 @@ const MOCK_AGENTS: AgentProfile[] = [
       voice: '清晰'
     },
     memory_config: {
-      memory_ids: [],
-      cold_memory_ids: []
+      memory_ids: []
     },
     created_at: new Date('2024-01-01T00:00:00Z'),
     updated_at: new Date('2024-01-01T00:00:00Z'),
@@ -66,8 +64,7 @@ const MOCK_AGENTS: AgentProfile[] = [
       voice: '溫暖'
     },
     memory_config: {
-      memory_ids: [],
-      cold_memory_ids: []
+      memory_ids: []
     },
     created_at: new Date('2024-01-02T00:00:00Z'),
     updated_at: new Date('2024-01-02T00:00:00Z'),
@@ -85,8 +82,7 @@ const MOCK_AGENTS_RESPONSE = [
       voice: '清晰'
     },
     memory_config: {
-      memory_ids: [],
-      cold_memory_ids: []
+      memory_ids: []
     },
     created_at: '2024-01-01T00:00:00.000Z',
     updated_at: '2024-01-01T00:00:00.000Z',
@@ -100,8 +96,7 @@ const MOCK_AGENTS_RESPONSE = [
       voice: '溫暖'
     },
     memory_config: {
-      memory_ids: [],
-      cold_memory_ids: []
+      memory_ids: []
     },
     created_at: '2024-01-02T00:00:00.000Z',
     updated_at: '2024-01-02T00:00:00.000Z',
@@ -312,9 +307,8 @@ describe('Agents Collection API Tests', () => {
         expect(agent.persona).toHaveProperty('tone');
         expect(agent.persona).toHaveProperty('background');
         expect(agent.persona).toHaveProperty('voice');
-        expect(agent).toHaveProperty('memory_config');
-        expect(agent.memory_config).toHaveProperty('memory_ids');
-        expect(agent.memory_config).toHaveProperty('cold_memory_ids');
+              expect(agent).toHaveProperty('memory_config');
+      expect(agent.memory_config).toHaveProperty('memory_ids');
         expect(agent).toHaveProperty('created_at');
         expect(agent).toHaveProperty('updated_at');
         // 驗證時間戳格式
@@ -336,8 +330,7 @@ describe('Agents Collection API Tests', () => {
           voice: '中性且清晰，帶有親和力的語調'
         },
         memory_config: {
-          memory_ids: [],
-          cold_memory_ids: []
+          memory_ids: []
         }
       };
 
@@ -362,8 +355,7 @@ describe('Agents Collection API Tests', () => {
           voice: complexInput.persona.voice
         },
         memory_config: {
-          memory_ids: complexInput.memory_config.memory_ids,
-          cold_memory_ids: complexInput.memory_config.cold_memory_ids
+          memory_ids: complexInput.memory_config.memory_ids
         },
         created_at: expect.any(String),
         updated_at: expect.any(String)

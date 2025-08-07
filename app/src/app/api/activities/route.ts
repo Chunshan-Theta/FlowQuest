@@ -72,7 +72,8 @@ export async function POST(request: NextRequest) {
       _id: generateObjectId(),
       ...activityData,
       memory_ids: [], // 確保初始化為空陣列
-      start_time: new Date(),
+      created_at: new Date(),
+      updated_at: new Date(),
     };
 
     const result = await collection.insertOne(newActivity);

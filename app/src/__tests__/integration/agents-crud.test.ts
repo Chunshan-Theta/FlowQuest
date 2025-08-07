@@ -41,10 +41,9 @@ describe('Agent CRUD 整合測試', () => {
       background: '資深客戶服務代表',
       voice: '清晰溫暖的聲音'
     },
-    memory_config: {
-      memory_ids: [],
-      cold_memory_ids: []
-    }
+          memory_config: {
+        memory_ids: []
+      }
   };
 
   const CREATED_AGENT: AgentProfile = {

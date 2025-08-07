@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { AgentProfile, CreateAgentProfileInput, ApiResponse } from '@/types';
+import { AgentProfile, CreateAgentProfileInput, ApiResponse, AgentMemory } from '@/types';
+import { useMemories } from '@/hooks/useMemories';
+import { MemoryForm } from '@/components/MemoryForm';
 
 interface AgentFormProps {
   agent?: AgentProfile;
@@ -11,6 +13,7 @@ interface AgentFormProps {
 }
 
 function AgentForm({ agent, onSubmit, onCancel, isSubmitting = false }: AgentFormProps) {
+  const [showMemoryForm, setShowMemoryForm] = useState(false);
   const [formData, setFormData] = useState<CreateAgentProfileInput>({
     name: agent?.name || '',
     persona: {
@@ -19,8 +22,7 @@ function AgentForm({ agent, onSubmit, onCancel, isSubmitting = false }: AgentFor
       voice: agent?.persona.voice || '',
     },
     memory_config: {
-      memory_ids: [],
-      cold_memory_ids: [],
+      memory_ids: agent?.memory_config?.memory_ids || [],
     },
   });
 
@@ -47,13 +49,52 @@ function AgentForm({ agent, onSubmit, onCancel, isSubmitting = false }: AgentFor
     }
   };
 
+  const handleMemoryChange = (memory: AgentMemory, checked: boolean) => {
+    setFormData(prev => ({
+      ...prev,
+      memory_config: {
+        ...prev.memory_config!,
+        memory_ids: checked 
+          ? [...prev.memory_config!.memory_ids, memory]
+          : prev.memory_config!.memory_ids.filter(m => m._id !== memory._id)
+      }
+    }));
+  };
+
+  const handleAddMemory = (memory: AgentMemory) => {
+    // 為新記憶設置正確的欄位
+    const newMemory: AgentMemory = {
+      ...memory,
+      _id: `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, // 生成唯一的臨時 ID
+      agent_id: agent?._id || '', // 設置 agent_id
+      created_by_user_id: 'temp_user_id', // 臨時用戶 ID，實際應用中應該從認證系統獲取
+    };
+    
+    setFormData(prev => ({
+      ...prev,
+      memory_config: {
+        ...prev.memory_config!,
+        memory_ids: [...prev.memory_config!.memory_ids, newMemory]
+      }
+    }));
+    setShowMemoryForm(false);
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
-      <h2 className="text-xl font-semibold mb-4 text-gray-800">
-        {agent ? '編輯 Agent' : '新增 Agent'}
-      </h2>
-      
-      <form onSubmit={handleSubmit} className="space-y-4">
+      {showMemoryForm ? (
+        <MemoryForm
+          onSubmit={handleAddMemory}
+          onCancel={() => setShowMemoryForm(false)}
+          isSubmitting={isSubmitting}
+        />
+      ) : (
+        <>
+          <h2 className="text-xl font-semibold mb-4 text-gray-800">
+            {agent ? '編輯 Agent' : '新增 Agent'}
+          </h2>
+          
+          <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Agent 名稱 *
@@ -112,6 +153,69 @@ function AgentForm({ agent, onSubmit, onCancel, isSubmitting = false }: AgentFor
           </div>
         </div>
 
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-medium text-gray-800">人物記憶設定</h3>
+            <button
+              type="button"
+              onClick={() => setShowMemoryForm(true)}
+              className="px-3 py-1 bg-green-600 text-white text-sm rounded-md hover:bg-green-700"
+            >
+              ➕ 新增記憶
+            </button>
+          </div>
+          
+          <div className="grid md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                熱記憶 (Hot Memories)
+              </label>
+              <div className="space-y-2 max-h-40 overflow-y-auto border border-gray-200 rounded-md p-3">
+                {formData.memory_config?.memory_ids.filter(m => m.type === 'hot').map((memory) => (
+                  <div key={memory._id} className="flex items-center justify-between p-2 bg-red-50 rounded">
+                    <span className="text-sm text-gray-700 flex-1">{memory.content}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleMemoryChange(memory, false)}
+                      className="text-red-600 hover:text-red-800 ml-2"
+                      title="移除記憶"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                {formData.memory_config?.memory_ids.filter(m => m.type === 'hot').length === 0 && (
+                  <p className="text-sm text-gray-500">暫無熱記憶</p>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                冷記憶 (Cold Memories)
+              </label>
+              <div className="space-y-2 max-h-40 overflow-y-auto border border-gray-200 rounded-md p-3">
+                {formData.memory_config?.memory_ids.filter(m => m.type === 'cold').map((memory) => (
+                  <div key={memory._id} className="flex items-center justify-between p-2 bg-blue-50 rounded">
+                    <span className="text-sm text-gray-700 flex-1">{memory.content}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleMemoryChange(memory, false)}
+                      className="text-red-600 hover:text-red-800 ml-2"
+                      title="移除記憶"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                {formData.memory_config?.memory_ids.filter(m => m.type === 'cold').length === 0 && (
+                  <p className="text-sm text-gray-500">暫無冷記憶</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div className="flex gap-3 pt-4">
           <button
             type="submit"
@@ -129,6 +233,8 @@ function AgentForm({ agent, onSubmit, onCancel, isSubmitting = false }: AgentFor
           </button>
         </div>
       </form>
+        </>
+      )}
     </div>
   );
 }
@@ -320,6 +426,18 @@ export default function AgentsPage() {
                       <span className="font-medium text-gray-600">聲音：</span>
                       <span className="text-gray-800">{agent.persona.voice}</span>
                     </div>
+                    {agent.memory_config && (
+                      <>
+                        <div>
+                          <span className="font-medium text-gray-600">熱記憶：</span>
+                          <span className="text-gray-800">{agent.memory_config.memory_ids.filter(m => m.type === 'hot').length} 個</span>
+                        </div>
+                        <div>
+                          <span className="font-medium text-gray-600">冷記憶：</span>
+                          <span className="text-gray-800">{agent.memory_config.memory_ids.filter(m => m.type === 'cold').length} 個</span>
+                        </div>
+                      </>
+                    )}
                   </div>
 
                   <div className="mt-4 pt-4 border-t border-gray-200 text-xs text-gray-500">

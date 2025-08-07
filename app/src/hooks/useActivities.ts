@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Activity, CreateActivityInput, UpdateActivityInput, ActivityFilter, ApiResponse } from '@/types';
+import { Activity, CreateActivityInput, UpdateActivityInput, ActivityFilter, ApiResponse, AgentMemory, CreateAgentMemoryInput } from '@/types';
 
 export function useActivities() {
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -16,11 +16,11 @@ export function useActivities() {
       if (filter?.status) {
         params.append('status', filter.status);
       }
-      if (filter?.start_after) {
-        params.append('start_after', filter.start_after.toISOString());
+      if (filter?.created_after) {
+        params.append('created_after', filter.created_after.toISOString());
       }
-      if (filter?.start_before) {
-        params.append('start_before', filter.start_before.toISOString());
+      if (filter?.created_before) {
+        params.append('created_before', filter.created_before.toISOString());
       }
       
       const url = `/api/activities${params.toString() ? `?${params.toString()}` : ''}`;
@@ -181,6 +181,132 @@ export function useActivities() {
     }
   }, []);
 
+  // 獲取活動的所有記憶
+  const fetchActivityMemories = useCallback(async (activityId: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await fetch(`/api/activities/${activityId}/memories`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const result: ApiResponse<AgentMemory[]> = await response.json();
+      
+      if (result.success && result.data) {
+        return result.data;
+      } else {
+        throw new Error(result.error || '獲取記憶失敗');
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : '網路錯誤';
+      setError(errorMessage);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // 為活動新增記憶
+  const createActivityMemory = useCallback(async (activityId: string, memoryData: CreateAgentMemoryInput) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await fetch(`/api/activities/${activityId}/memories`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(memoryData),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const result: ApiResponse<AgentMemory> = await response.json();
+      
+      if (result.success && result.data) {
+        return result.data;
+      } else {
+        throw new Error(result.error || '創建記憶失敗');
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : '網路錯誤';
+      setError(errorMessage);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // 更新活動記憶
+  const updateActivityMemory = useCallback(async (activityId: string, memoryId: string, updateData: Partial<AgentMemory>) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await fetch(`/api/activities/${activityId}/memories/${memoryId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updateData),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const result: ApiResponse<AgentMemory> = await response.json();
+      
+      if (result.success && result.data) {
+        return result.data;
+      } else {
+        throw new Error(result.error || '更新記憶失敗');
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : '網路錯誤';
+      setError(errorMessage);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // 刪除活動記憶
+  const deleteActivityMemory = useCallback(async (activityId: string, memoryId: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await fetch(`/api/activities/${activityId}/memories/${memoryId}`, {
+        method: 'DELETE',
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const result: ApiResponse<AgentMemory> = await response.json();
+      
+      if (result.success) {
+        return true;
+      } else {
+        throw new Error(result.error || '刪除記憶失敗');
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : '網路錯誤';
+      setError(errorMessage);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   return {
     activities,
     loading,
@@ -190,6 +316,11 @@ export function useActivities() {
     createActivity,
     updateActivity,
     deleteActivity,
+    // 記憶管理功能
+    fetchActivityMemories,
+    createActivityMemory,
+    updateActivityMemory,
+    deleteActivityMemory,
     setError, // 允許手動清除錯誤
   };
 }
