@@ -76,6 +76,23 @@ export default function ActivityChatPage() {
     scrollToBottom();
   }, [chatSession?.messages]);
 
+  // 追蹤前端聊天會話狀態變化
+  useEffect(() => {
+    if (chatSession) {
+      console.log('📱 前端聊天會話狀態已更新:', {
+        messageCount: chatSession.messages.length,
+        currentUnitId: chatSession.current_unit_id,
+        isCompleted: chatSession.is_completed,
+        messagesByUnit: chatSession.messages.reduce((acc: any, msg) => {
+          const unitId = msg.unit_id || 'unknown';
+          acc[unitId] = (acc[unitId] || 0) + 1;
+          return acc;
+        }, {}),
+        recentMessages: chatSession.messages.slice(-3).map(m => `${m.role}(${m.unit_id}): ${m.content.substring(0, 30)}...`)
+      });
+    }
+  }, [chatSession]);
+
   // 嘗試載入保存的 session_id
   useEffect(() => {
     const activityId = params.id as string | undefined;
@@ -126,69 +143,83 @@ export default function ActivityChatPage() {
         if (sessionId) {
           try {
             const serverSession = await fetchSession(sessionId as any);
-            if (serverSession && coursePackageData.units.length > 0) {
+            if (serverSession) {
+              console.log('📋 載入現有會話:', {
+                sessionId: serverSession.session_id,
+                unitResults: serverSession.unit_results?.length || 0,
+                unitResultsDetail: serverSession.unit_results?.map((ur: any) => ({
+                  unit_id: ur.unit_id,
+                  status: ur.status,
+                  messageCount: ur.conversation_logs?.length || 0
+                }))
+              });
               const sortedUnits = [...coursePackageData.units].sort((a, b) => a.order - b.order);
-              // 取最近一個有對話紀錄的單元，否則第一個
-              const lastWithLogs = [...serverSession.unit_results].reverse().find(u => (u.conversation_logs?.length || 0) > 0);
-              const currentUnit = lastWithLogs?.unit_id?.toString() || sortedUnits[0]._id.toString();
-              const logs = lastWithLogs?.conversation_logs || [];
-              const currentUnitObj = sortedUnits.find(u => u._id.toString() === currentUnit);
-              const messages: ChatMessage[] = logs.map((l, idx) => ({
-                id: `srv-${idx}-${Date.now()}`,
-                role: (l.role as 'user' | 'assistant'),
-                content: l.content,
-                timestamp: new Date(l.timestamp),
-                unit_id: currentUnit,
-              }));
-              // 若該單元沒有歷史對話且有 intro_message，主動發出開始對話並持久化
-              if (messages.length === 0 && currentUnitObj?.intro_message) {
-                const introMsg: ChatMessage = {
-                  id: `intro-${Date.now()}`,
-                  role: 'assistant',
-                  content: currentUnitObj.intro_message,
-                  timestamp: new Date(),
-                  unit_id: currentUnit,
-                };
-                messages.push(introMsg);
-                try {
-                  const systemPrompt = generateSystemPrompt(agent, currentUnitObj, coursePackage, '');
-                  const upsertRes1 = await upsertSession({
-                    activity_id: activityId,
-                    user_id: 'default_user',
-                    session_id: sessionId!,
-                    user_name: localStorage.getItem(`fq_user_name_${activityId}`) || '',
-                    summary: '',
-                    unit_results: [
-                      {
-                        unit_id: currentUnit,
-                        status: 'failed',
-                        turn_count: 0,
-                        important_keywords: [],
-                        standard_pass_rules: [],
-                        conversation_logs: [
-                          {
-                            role: 'assistant',
-                            content: currentUnitObj.intro_message,
-                            timestamp: new Date(),
-                            system_prompt: systemPrompt,
-                            memories: [...memoryState.integratedHotMemories, ...memoryState.integratedColdMemories],
-                          },
-                        ],
-                      },
-                    ],
-                  });
-                  console.log('Session upserted (reconstruct-intro):', upsertRes1);
-                } catch {}
+              let reconstructed = reconstructChatSessionFromServer(serverSession);
+
+              // 若尚無任何歷史對話且第一個單元有 intro_message，主動發出開始對話並持久化
+              if (reconstructed.messages.length === 0 && sortedUnits.length > 0) {
+                const firstUnit = sortedUnits[0];
+                if (firstUnit.intro_message) {
+                  const introMsg: ChatMessage = {
+                    id: `intro-${Date.now()}`,
+                    role: 'assistant',
+                    content: firstUnit.intro_message,
+                    timestamp: new Date(),
+                    unit_id: firstUnit._id.toString(),
+                  };
+
+                  // 將 intro 訊息加入到當前前端對話狀態
+                  reconstructed = {
+                    ...reconstructed,
+                    current_unit_id: firstUnit._id.toString(),
+                    messages: [...reconstructed.messages, introMsg],
+                    current_turn: 0,
+                    started_at: introMsg.timestamp,
+                    updated_at: introMsg.timestamp,
+                  };
+
+                  // 嘗試持久化到 Session 紀錄
+                  try {
+                    const systemPrompt = generateSystemPrompt(agent, firstUnit, coursePackage, '');
+                    await upsertSession({
+                      activity_id: activityId,
+                      user_id: 'default_user',
+                      session_id: sessionId!,
+                      user_name: localStorage.getItem(`fq_user_name_${activityId}`) || '',
+                      summary: '',
+                      unit_results: [
+                        {
+                          unit_id: firstUnit._id.toString(),
+                          status: 'failed',
+                          turn_count: 0,
+                          important_keywords: [],
+                          standard_pass_rules: [],
+                          conversation_logs: [
+                            {
+                              role: 'assistant',
+                              content: firstUnit.intro_message,
+                              timestamp: new Date(),
+                              system_prompt: systemPrompt,
+                              memories: [...memoryState.integratedHotMemories, ...memoryState.integratedColdMemories],
+                            },
+                          ],
+                        },
+                      ],
+                    });
+                  } catch {}
+                }
               }
-              const reconstructed: ChatSession = {
-                activity_id: activityId,
-                current_unit_id: currentUnit,
-                messages,
-                current_turn: lastWithLogs?.turn_count || Math.floor(messages.filter(m => m.role === 'assistant').length),
-                is_completed: false,
-                started_at: messages[0]?.timestamp || new Date(),
-                updated_at: messages[messages.length - 1]?.timestamp || new Date(),
-              };
+
+              // 若無 current_unit_id，預設為第一個單元
+              if (!reconstructed.current_unit_id && sortedUnits.length > 0) {
+                reconstructed = { ...reconstructed, current_unit_id: sortedUnits[0]._id.toString() };
+              }
+
+              console.log('✅ 設定前端會話狀態 (載入現有):', {
+                messageCount: reconstructed.messages.length,
+                currentUnitId: reconstructed.current_unit_id,
+                isCompleted: reconstructed.is_completed
+              });
               setChatSession(reconstructed);
             } else if (coursePackageData.units.length > 0) {
               // 初始化一個空的對話會話（僅供前端渲染）
@@ -318,10 +349,21 @@ export default function ActivityChatPage() {
       .then((json) => {
         if (json?.success) {
           setReportId(json.data?._id?.toString?.() || null);
-          try {
-            const reconstructed = reconstructChatSessionFromServer(json.data);
-            setChatSession(reconstructed);
-          } catch {}
+                      try {
+              console.log('🚀 初始化會話 - 收到後端資料:', {
+                sessionData: json.data,
+                unitResults: json.data?.unit_results?.length || 0
+              });
+              const reconstructed = reconstructChatSessionFromServer(json.data);
+              console.log('✅ 設定前端會話狀態 (初始化):', {
+                messageCount: reconstructed.messages.length,
+                currentUnitId: reconstructed.current_unit_id,
+                isCompleted: reconstructed.is_completed
+              });
+              setChatSession(reconstructed);
+            } catch (error) {
+              console.error('❌ 初始化會話重建失敗:', error);
+            }
         }
       })
       .catch(() => {});
@@ -348,14 +390,32 @@ export default function ActivityChatPage() {
         }),
       });
       const json = await res.json();
-      if (json?.success) {
-        try {
-          const serverSession = json.data?.session;
-          const reconstructed = reconstructChatSessionFromServer(serverSession);
-          setChatSession(reconstructed);
-          if (!reportId) setReportId(serverSession?._id?.toString?.() || null);
-        } catch {}
-      }
+              if (json?.success) {
+          try {
+            const serverSession = json.data?.session;
+            console.log('🔄 收到後端會話資料:', {
+              unitResults: serverSession?.unit_results?.length || 0,
+              sessionId: serverSession?.session_id,
+              activityId: serverSession?.activity_id,
+              unitResultsDetail: serverSession?.unit_results?.map((ur: any) => ({
+                unit_id: ur.unit_id,
+                status: ur.status,
+                messageCount: ur.conversation_logs?.length || 0,
+                messages: ur.conversation_logs?.map((l: any) => `${l.role}: ${l.content.substring(0, 50)}...`)
+              }))
+            });
+            const reconstructed = reconstructChatSessionFromServer(serverSession);
+            console.log('🎯 重建後的前端會話:', {
+              messageCount: reconstructed.messages.length,
+              currentUnitId: reconstructed.current_unit_id,
+              messages: reconstructed.messages.map(m => `${m.role}(${m.unit_id}): ${m.content.substring(0, 50)}...`)
+            });
+            setChatSession(reconstructed);
+            if (!reportId) setReportId(serverSession?._id?.toString?.() || null);
+          } catch (error) {
+            console.error('❌ 重建會話失敗:', error);
+          }
+        }
     } catch (error) {
       console.error('發送訊息失敗:', error);
     }
@@ -405,29 +465,53 @@ export default function ActivityChatPage() {
     return [...coursePackage.units].sort((a, b) => a.order - b.order);
   };
 
-  // 將後端 SessionRecord 重建為前端 ChatSession（僅取當前單元對話）
+  // 將後端 SessionRecord 重建為前端 ChatSession（包含所有單元的歷史對話）
   const reconstructChatSessionFromServer = (serverSession: any): ChatSession => {
     const unitResults: any[] = serverSession?.unit_results || [];
+    
     // 當前單元：最後一個有對話的單元
     const lastWithLogs = [...unitResults].reverse().find((u: any) => (u.conversation_logs?.length || 0) > 0);
     const currentUnitId = lastWithLogs?.unit_id?.toString?.() || '';
-    // 將所有單元對話攤平成單一訊息串，依 timestamp 排序（隱性切關）
-    const allLogs: Array<{ unit_id: string; role: 'user'|'assistant'; content: string; timestamp: Date } > = [] as any;
+    
+    // 將所有單元對話攤平成單一訊息串，依 timestamp 排序（保留完整歷史）
+    const allLogs: Array<{ unit_id: string; role: 'user'|'assistant'; content: string; timestamp: Date } > = [];
     for (const ur of unitResults) {
       const uid = String(ur.unit_id);
-      for (const l of (ur.conversation_logs || [])) {
-        allLogs.push({ unit_id: uid, role: l.role as any, content: l.content, timestamp: new Date(l.timestamp) });
+      const logs = ur.conversation_logs || [];
+      for (const l of logs) {
+        allLogs.push({ 
+          unit_id: uid, 
+          role: l.role as any, 
+          content: l.content, 
+          timestamp: new Date(l.timestamp) 
+        });
       }
     }
+    
+    // 按時間戳排序所有訊息
     allLogs.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+    
+    // 轉換為前端訊息格式，保留所有歷史對話
     const messages: ChatMessage[] = allLogs.map((l, idx) => ({
-      id: `srv-${idx}-${Date.now()}`,
+      id: `srv-${idx}-${l.timestamp.getTime()}`, // 使用時間戳確保 ID 唯一性
       role: l.role,
       content: l.content,
       timestamp: l.timestamp,
       unit_id: l.unit_id,
     }));
-    const currentTurn = (unitResults.find((u: any) => String(u.unit_id) === String(currentUnitId))?.turn_count) || Math.floor(messages.filter(m => m.unit_id === currentUnitId && m.role === 'assistant').length);
+    
+    const currentTurn = (unitResults.find((u: any) => String(u.unit_id) === String(currentUnitId))?.turn_count) || 0;
+    
+    console.log('重建聊天會話:', {
+      unitResults: unitResults.length,
+      totalMessages: messages.length,
+      currentUnitId,
+      messagesByUnit: unitResults.map(ur => ({ 
+        unit_id: ur.unit_id, 
+        messageCount: (ur.conversation_logs || []).length 
+      }))
+    });
+    
     return {
       activity_id: (activity?._id || serverSession?.activity_id)?.toString?.() || '',
       current_unit_id: currentUnitId,
@@ -607,9 +691,25 @@ export default function ActivityChatPage() {
             </div>
           )}
           
-          {chatSession?.messages.map((message) => (
-            <ChatMessageComponent key={message.id} message={message} agentName={agent.name} />
-          ))}
+          {chatSession?.messages.map((message, index) => {
+            // 檢查是否需要顯示單元分隔線
+            const prevMessage = index > 0 ? chatSession.messages[index - 1] : null;
+            const showUnitDivider = prevMessage && message.unit_id !== prevMessage.unit_id;
+            const currentMessageUnit = getSortedUnits().find(u => u._id.toString() === message.unit_id);
+            
+            return (
+              <div key={message.id}>
+                {showUnitDivider && currentMessageUnit && (
+                  <div className="flex justify-center my-4">
+                    <div className="bg-blue-100 text-blue-700 px-4 py-2 rounded-full text-sm font-medium">
+                      進入關卡：{currentMessageUnit.title}
+                    </div>
+                  </div>
+                )}
+                <ChatMessageComponent message={message} agentName={agent.name} />
+              </div>
+            );
+          })}
           
           {isLoading && (
             <div className="flex justify-start">
@@ -717,3 +817,4 @@ function ChatMessageComponent({ message, agentName }: { message: ChatMessage; ag
     </div>
   );
 }
+

@@ -27,6 +27,8 @@ export async function POST(request: NextRequest) {
     const cpCol = await getCoursePackagesCollection();
     const unitsCol = await getUnitsCollection();
     const sessions = await getSessionsCollection();
+    const db = await getDatabase();
+    const memCol = db.collection('memories');
 
     const activity = await activities.findOne({ _id: activity_id } as any);
     if (!activity) return NextResponse.json({ success: false, error: '找不到活動' } as ApiResponse<any>, { status: 404 });
@@ -35,16 +37,28 @@ export async function POST(request: NextRequest) {
     const course = await cpCol.findOne({ _id: activity.course_package_id } as any) as any as CoursePackage;
     const units = await unitsCol.find({ course_package_id: String(activity.course_package_id) } as any).sort({ order: 1 }).toArray();
 
-    // Integrated memories (server-side basic: agent + activity)
+    // Integrated memories baseline: agent + activity + dynamic (persisted)
     const agentMemories = ((agent as any)?.memories || []) as any[];
     const activityMemories = ((activity as any)?.memories || []) as any[];
+    const dynamicMemories = await memCol
+      .find({
+        agent_id: String((agent as any)?._id || ''),
+        created_by_user_id: String(user_id),
+        activity_id: String(activity_id),
+        session_id: String(session_id),
+      })
+      .sort({ created_at: 1 })
+      .toArray();
+
     let hotMemories = [
       ...agentMemories.filter((m: any) => m.type === 'hot'),
       ...activityMemories.filter((m: any) => m.type === 'hot'),
+      ...dynamicMemories.filter((m: any) => m.type === 'hot'),
     ];
     let coldMemories = [
       ...agentMemories.filter((m: any) => m.type === 'cold'),
       ...activityMemories.filter((m: any) => m.type === 'cold'),
+      ...dynamicMemories.filter((m: any) => m.type === 'cold'),
     ];
     const baseHotCount = hotMemories.length; // baseline before promotions/additions
 
@@ -79,7 +93,7 @@ export async function POST(request: NextRequest) {
       const coldList = coldMemories.map((m, i) => `${i + 1}. ${m.content}`).join('\n');
       const selectPrompt = `請分析以下冷記憶是否與用戶輸入相關。\n\n冷記憶列表：\n${coldList}\n\n用戶輸入：${message}\n\n請只返回相關記憶的編號（用逗號分隔），如果沒有相關的請返回"無"。例如：1,3,5 或 無`;
       const sel = await openai.chat.completions.create({
-        model: 'gpt-4o',
+        model: 'gpt-4o-mini',
         messages: [
           { role: 'system', content: '你是一個記憶分析助手，負責判斷記憶與用戶輸入的相關性。' },
           { role: 'user', content: selectPrompt },
@@ -129,12 +143,12 @@ export async function POST(request: NextRequest) {
     // 3rd stage: create new memories (hot + cold) based on the exchange
     const keywords = extractKeywords(`${assistant} ${message}`);
     const newContent = `對方說: ${message}\n你回應: ${assistant}`;
-    const db = await getDatabase();
-    const memCol = db.collection('memories');
 
     const hotDoc = {
       _id: new ObjectId(),
       agent_id: String((agent as any)?._id || ''),
+      activity_id: String(activity_id),
+      session_id: String(session_id),
       type: 'hot',
       content: newContent,
       tags: keywords,
@@ -144,6 +158,8 @@ export async function POST(request: NextRequest) {
     const coldDoc = {
       _id: new ObjectId(),
       agent_id: String((agent as any)?._id || ''),
+      activity_id: String(activity_id),
+      session_id: String(session_id),
       type: 'cold',
       content: newContent,
       tags: keywords,
@@ -159,32 +175,33 @@ export async function POST(request: NextRequest) {
 
     // Consolidate hot memories to a target count based on baseline (similar to client)
     const targetCount = Math.max(3, baseHotCount);
+    let consolidated: any[] = [];
     if (hotMemories.length > targetCount) {
       const hotText = hotMemories.map((m, i) => `${i + 1}. ${m.content}`).join('\n');
-      const consPrompt = `請整合以下熱記憶，將 ${hotMemories.length} 條記憶整合成 ${targetCount} 條新的記憶。\n\n當前熱記憶（${hotMemories.length} 條）：\n${hotText}\n\nLLM 回應：${assistant}\n\n請分析這些記憶，將相關的記憶整合成新的記憶。整合時要：\n1. 保留重要的信息\n2. 合併相似或相關的內容\n3. 生成 ${targetCount} 條新的整合記憶\n\n請返回整合後的新記憶內容，格式如下：\n記憶1: [新記憶內容]\n記憶2: [新記憶內容]\n...\n記憶${targetCount}: [新記憶內容]`;
+      const consPrompt = `請整合以下熱記憶，將 ${hotMemories.length} 條記憶整合成 ${targetCount} 條新的記憶。\n\n當前熱記憶（${hotMemories.length} 條）：\n${hotText}\n\n對方說：${message}\n\n你回應：${assistant}\n\n請分析這些記憶，將相關的記憶整合成新的記憶。整合時要：\n1. 保留重要的信息\n2. 合併相似或相關的內容\n3. 最終生成 ${targetCount} 條新的整合記憶\n\n請返回整合後的新記憶內容，格式如下：\n記憶1: [新記憶內容]\n記憶2: [新記憶內容]\n...\n記憶${targetCount}: [新記憶內容]`;
       const cons = await openai.chat.completions.create({
-        model: 'gpt-4o',
+        model: 'gpt-4o-mini',
         messages: [
-          
           { role: 'system', content: '你是一個記憶整合助手，負責選擇最重要的記憶。' },
           { role: 'user', content: consPrompt },
         ],
         temperature: 0.2,
-        max_tokens: 400,
+        max_tokens: 1024,
       });
       const consText = (cons.choices[0]?.message?.content || '').trim();
       const lines = consText.split('\n');
-      const consolidated: any[] = [];
       for (let i = 0; i < targetCount; i++) {
         const idx = i + 1;
-        const re = new RegExp(`記憶${idx}:\\s*(.+)`, 'i');
+        const re = new RegExp(`記憶${idx}:\s*(.+)`, 'i');
         const line = lines.find((l) => re.test(l));
         if (line) {
           const m = line.match(re);
           if (m && m[1]) {
             consolidated.push({
-              _id: `consolidated_${Date.now()}_${i}`,
+              _id: new ObjectId(),
               agent_id: String((agent as any)?._id || ''),
+              activity_id: String(activity_id),
+              session_id: String(session_id),
               type: 'hot',
               content: m[1].trim(),
               tags: extractKeywords(m[1]),
@@ -195,7 +212,25 @@ export async function POST(request: NextRequest) {
         }
       }
       if (consolidated.length > 0) {
-        coldMemories = [...coldMemories, ...hotMemories.map((m: any) => ({ ...m, type: 'cold' }))];
+        // Persist consolidation: demote previous dynamic hot to cold, insert consolidated as new hot
+        await memCol.updateMany(
+          {
+            agent_id: String((agent as any)?._id || ''),
+            created_by_user_id: String(user_id),
+            type: 'hot',
+            activity_id: String(activity_id),
+            session_id: String(session_id),
+          },
+          { $set: { type: 'cold' } }
+        );
+        if (consolidated.length > 0) {
+          await memCol.insertMany(consolidated);
+        }
+        // Update snapshot arrays
+        coldMemories = [
+          ...coldMemories,
+          ...hotMemories.map((m: any) => ({ ...m, type: 'cold' })),
+        ];
         hotMemories = consolidated;
       }
     }
@@ -240,16 +275,14 @@ export async function POST(request: NextRequest) {
       isPassed = (unitObj.pass_condition.value || []).every((k: any) => allUserText.includes(String(k).toLowerCase()));
     } else if (unitObj?.pass_condition?.type === 'llm') {
       const currentUnitLogs = (unitResults.find((u: any) => String(u.unit_id) === String(currentUnitId))?.conversation_logs || []) as any[];
-      const lastTurn = currentUnitLogs.slice(-10); // 只取最後一輪（通常是 user + assistant）
-      const logsForJudge = lastTurn.length > 0 ? lastTurn : currentUnitLogs.slice(-1);
-      const convoText = logsForJudge.map((l) => `${l.role}: ${l.content}`).join('\n');
+      const convoText = currentUnitLogs.map((l) => `${l.role}: ${l.content}`).join('\n');
       const checkPrompt = `請判斷以下對話是否滿足通過條件：\n\n通過條件：${(unitObj.pass_condition.value || []).join(', ')}\n\n對話內容：\n${convoText}\n\n請只回答 "YES" 或 "NO"，並簡單說明原因。`;
       console.log('=== LLM PASS CHECK START ===');
       console.log('session_id:', session_id, 'unit_id:', currentUnitId);
       console.log('conditions:', unitObj?.pass_condition?.value);
       console.log('prompt:\n', checkPrompt);
       const judge = await openai.chat.completions.create({
-        model: 'gpt-4o',
+        model: 'gpt-4o-mini',
         messages: [{ role: 'user', content: checkPrompt }],
         temperature: 0,
         max_tokens: 100,

@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { agent_id, type, content, tags, created_by_user_id } = body;
+    const { agent_id, activity_id, session_id, type, content, tags, created_by_user_id } = body;
     
     // 驗證必填欄位
     if (!agent_id || !type || !content || !created_by_user_id) {
@@ -41,6 +41,16 @@ export async function POST(request: NextRequest) {
         success: false,
         error: '缺少必填欄位',
         message: '請提供 agent_id、type、content 和 created_by_user_id'
+      };
+      return NextResponse.json(response, { status: 400 });
+    }
+
+    // 可選：如果提供其一則需同時提供，用於明確會話作用域
+    if ((activity_id && !session_id) || (!activity_id && session_id)) {
+      const response: ApiResponse<null> = {
+        success: false,
+        error: '會話作用域參數不完整',
+        message: 'activity_id 與 session_id 需同時提供或同時省略'
       };
       return NextResponse.json(response, { status: 400 });
     }
@@ -71,6 +81,8 @@ export async function POST(request: NextRequest) {
     const newMemory = {
       _id: new ObjectId(),
       agent_id: agent_id.toString(),
+      activity_id: activity_id ? activity_id.toString() : undefined,
+      session_id: session_id ? session_id.toString() : undefined,
       type,
       content: content.trim(),
       tags: tags || [],

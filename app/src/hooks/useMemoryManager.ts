@@ -19,13 +19,16 @@ export interface MemoryManagerActions {
   findRelevantMemoriesForInput: (userInput: string) => Promise<AgentMemory[]>;
   
   // 第三階段：LLM回應後更新記憶
-  updateMemoriesFromLLMResponse: (llmResponse: string, userInput: string, agentId: string, userId: string) => Promise<void>;
+  updateMemoriesFromLLMResponse: (llmResponse: string, userInput: string, agentId: string, userId: string, activityId?: string, sessionId?: string) => Promise<void>;
   
   // 獲取當前所有相關記憶（用於生成系統提示）
   getRelevantMemories: (context: string, maxCount?: number) => AgentMemory[];
   
   // 整理熱記憶（第三階段的核心邏輯）
   consolidateHotMemories: (llmResponse: string) => Promise<void>;
+
+  // 直接以伺服器快照覆寫本地記憶狀態
+  setFromSnapshot: (hot: AgentMemory[], cold: AgentMemory[]) => void;
 }
 
 export function useMemoryManager() {
@@ -158,14 +161,14 @@ ${coldMemoriesText}
       
       let relevantIndices: number[] = [];
       
-             if (llmResponse !== '無' && llmResponse !== 'none' && llmResponse !== 'None') {
-         // 解析 LLM 返回的編號
-         relevantIndices = llmResponse
-           .split(/[,，\s]+/)
-           .map((s: string) => parseInt(s.trim()))
-           .filter((n: number) => !isNaN(n) && n > 0 && n <= currentState.integratedColdMemories.length)
-           .map((n: number) => n - 1); // 轉換為陣列索引
-       }
+      if (llmResponse !== '無' && llmResponse !== 'none' && llmResponse !== 'None') {
+        // 解析 LLM 返回的編號
+        relevantIndices = llmResponse
+          .split(/[,，\s]+/)
+          .map((s: string) => parseInt(s.trim()))
+          .filter((n: number) => !isNaN(n) && n > 0 && n <= currentState.integratedColdMemories.length)
+          .map((n: number) => n - 1); // 轉換為陣列索引
+      }
       
       const relevantColdMemories = relevantIndices.map(index => 
         currentState.integratedColdMemories[index]
@@ -199,32 +202,32 @@ ${coldMemoriesText}
     }
   }, []);
 
-        // 整理熱記憶（第三階段核心邏輯）
-   const consolidateHotMemories = useCallback(async (llmResponse: string) => {
-     console.log('=== 整理熱記憶 ===');
-     
-     const currentState = stateRef.current;
-     const currentHotCount = currentState.integratedHotMemories.length;
-     const targetCount = currentState.baseHotMemoryCount > 3 ? currentState.baseHotMemoryCount : 3;
-     
-        console.log(`當前熱記憶數量: ${currentHotCount}, 目標數量: ${targetCount}`);
-        console.log('當前熱記憶:', currentState.integratedHotMemories.map(m => ({
-         id: m._id,
-         content: m.content.substring(0, 100) + (m.content.length > 100 ? '...' : ''),
-         type: m.type
-       })));
-     if (currentHotCount <= targetCount) {
-       console.log('熱記憶數量未超過基礎數量，無需整理');
-       return;
-     }
-     
-     try {
-       // 使用 LLM 整合熱記憶
-       const hotMemoriesText = currentState.integratedHotMemories
-         .map((memory, index) => `${index + 1}. ${memory.content}`)
-         .join('\n');
-       
-       const prompt = `請整合以下熱記憶，將 ${currentHotCount} 條記憶整合成 ${targetCount} 條新的記憶。
+  // 整理熱記憶（第三階段核心邏輯）
+  const consolidateHotMemories = useCallback(async (llmResponse: string) => {
+    console.log('=== 整理熱記憶 ===');
+    
+    const currentState = stateRef.current;
+    const currentHotCount = currentState.integratedHotMemories.length;
+    const targetCount = currentState.baseHotMemoryCount > 3 ? currentState.baseHotMemoryCount : 3;
+    
+    console.log(`當前熱記憶數量: ${currentHotCount}, 目標數量: ${targetCount}`);
+    console.log('當前熱記憶:', currentState.integratedHotMemories.map(m => ({
+      id: m._id,
+      content: m.content.substring(0, 100) + (m.content.length > 100 ? '...' : ''),
+      type: m.type
+    })));
+    if (currentHotCount <= targetCount) {
+      console.log('熱記憶數量未超過基礎數量，無需整理');
+      return;
+    }
+    
+    try {
+      // 使用 LLM 整合熱記憶
+      const hotMemoriesText = currentState.integratedHotMemories
+        .map((memory, index) => `${index + 1}. ${memory.content}`)
+        .join('\n');
+      
+      const prompt = `請整合以下熱記憶，將 ${currentHotCount} 條記憶整合成 ${targetCount} 條新的記憶。
 
 當前熱記憶（${currentHotCount} 條）：
 ${hotMemoriesText}
@@ -242,162 +245,83 @@ LLM 回應：${llmResponse}
 ...
 記憶${targetCount}: [新記憶內容]`;
 
-       const response = await fetch('/api/chat', {
-         method: 'POST',
-         headers: {
-           'Content-Type': 'application/json',
-         },
-         body: JSON.stringify({
-           messages: [
-             { role: 'system', content: '你是一個記憶整合助手，負責選擇最重要的記憶。' },
-             { role: 'user', content: prompt }
-           ]
-         }),
-       });
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: [
+            { role: 'system', content: '你是一個記憶整合助手，負責選擇最重要的記憶。' },
+            { role: 'user', content: prompt }
+          ]
+        }),
+      });
 
-       const result = await response.json();
-       
-       if (!result.success) {
-         console.error('LLM 整合失敗:', result.error);
-         return;
-       }
+      const result = await response.json();
+      
+      if (!result.success) {
+        console.error('LLM 整合失敗:', result.error);
+        return;
+      }
 
-       const llmResponse2 = result.message.trim();
-       console.log('LLM 整合結果:', llmResponse2);
-       
-       // 解析 LLM 返回的整合記憶內容
-       const consolidatedMemories: AgentMemory[] = [];
-       const lines = llmResponse2.split('\n');
-       
-       for (let i = 0; i < targetCount; i++) {
-         const memoryIndex = i + 1;
-         const memoryPattern = new RegExp(`記憶${memoryIndex}:\\s*(.+)`, 'i');
-         
-         // 尋找對應的記憶行
-         const memoryLine = lines.find((line: string) => memoryPattern.test(line));
-         if (memoryLine) {
-           const match = memoryLine.match(memoryPattern);
-           if (match && match[1]) {
-             const content = match[1].trim();
-             
-             // 創建新的整合記憶
-             const consolidatedMemory: AgentMemory = {
-               _id: `consolidated_${Date.now()}_${i}`,
-               agent_id: currentState.integratedHotMemories[0]?.agent_id || '',
-               content: content,
-               type: 'hot',
-               tags: extractKeywords(content),
-               created_by_user_id: currentState.integratedHotMemories[0]?.created_by_user_id || '',
-               created_at: new Date()
-             };
-             
-             consolidatedMemories.push(consolidatedMemory);
-           }
-         }
-       }
-       
-       console.log(`整合成 ${consolidatedMemories.length} 個新記憶`);
-       console.log('整合後的記憶:', consolidatedMemories.map(m => m.content.substring(0, 100)));
-       
-       if (consolidatedMemories.length > 0) {
-         setState(prev => {
-           // 將所有原有熱記憶轉為冷記憶
-           const newColdMemories = [
-             ...prev.integratedColdMemories,
-             ...currentState.integratedHotMemories.map(m => ({ ...m, type: 'cold' as const }))
-           ];
-           
-           return {
-             ...prev,
-             integratedHotMemories: consolidatedMemories,
-             integratedColdMemories: newColdMemories
-           };
-         });
-       }
-       
-     } catch (error) {
-       console.error('整合熱記憶失敗:', error);
-     }
-   }, []);
-
-   // 第三階段：LLM回應後更新記憶
-   const updateMemoriesFromLLMResponse = useCallback(async (
-     llmResponse: string, 
-     userInput: string, 
-     agentId: string, 
-     userId: string
-   ) => {
-     console.log('=== 第三階段：更新記憶 ===');
-     console.log('LLM回應:', llmResponse);
-     console.log('用戶輸入:', userInput);
-     
-     try {
-       // 基於用戶提問和LLM回應生成新記憶
-       const keywords = extractKeywords(llmResponse + ' ' + userInput);
-       
-       const newMemoryContent = `對方說: ${userInput}\n你回應: ${llmResponse}`;
-       
-       // 創建新記憶（冷熱各一條）
-       const baseMemory = {
-         agent_id: agentId,
-         content: newMemoryContent,
-         tags: keywords,
-         created_by_user_id: userId,
-       };
-       
-       const hotMemory: AgentMemory = {
-         ...baseMemory,
-         _id: `temp_hot_${Date.now()}`,
-         type: 'hot',
-         created_at: new Date()
-       };
-       
-       const coldMemory: AgentMemory = {
-         ...baseMemory,
-         _id: `temp_cold_${Date.now()}`,
-         type: 'cold', 
-         created_at: new Date()
-       };
-       
-       // 保存熱記憶到資料庫
-       const hotMemoryResponse = await fetch('/api/memories', {
-         method: 'POST',
-         headers: {
-           'Content-Type': 'application/json',
-         },
-         body: JSON.stringify(hotMemory),
-       });
-       
-       // 保存冷記憶到資料庫
-       const coldMemoryResponse = await fetch('/api/memories', {
-         method: 'POST',
-         headers: {
-           'Content-Type': 'application/json',
-         },
-         body: JSON.stringify(coldMemory),
-       });
-       
-       if (hotMemoryResponse.ok && coldMemoryResponse.ok) {
-         const hotResult = await hotMemoryResponse.json();
-         const coldResult = await coldMemoryResponse.json();
-         
-         if (hotResult.success && coldResult.success) {
-           setState(prev => ({
-             ...prev,
-             integratedHotMemories: [...prev.integratedHotMemories, { ...hotResult.data, type: 'hot' }],
-             integratedColdMemories: [...prev.integratedColdMemories, { ...coldResult.data, type: 'cold' }]
-           }));
-           
-           // 執行熱記憶整理
-           setTimeout(async () => {
-             await consolidateHotMemories(llmResponse);
-           }, 100);
-         }
-       }
-     } catch (error) {
-       console.error('保存記憶失敗:', error);
-     }
-   }, [consolidateHotMemories]);
+      const llmResponse2 = result.message.trim();
+      console.log('LLM 整合結果:', llmResponse2);
+      
+      // 解析 LLM 返回的整合記憶內容
+      const consolidatedMemories: AgentMemory[] = [];
+      const lines = llmResponse2.split('\n');
+      
+      for (let i = 0; i < targetCount; i++) {
+        const memoryIndex = i + 1;
+        const memoryPattern = new RegExp(`記憶${memoryIndex}:\\s*(.+)`, 'i');
+        
+        // 尋找對應的記憶行
+        const memoryLine = lines.find((line: string) => memoryPattern.test(line));
+        if (memoryLine) {
+          const match = memoryLine.match(memoryPattern);
+          if (match && match[1]) {
+            const content = match[1].trim();
+            
+            // 創建新的整合記憶
+            const consolidatedMemory: AgentMemory = {
+              _id: `consolidated_${Date.now()}_${i}`,
+              agent_id: currentState.integratedHotMemories[0]?.agent_id || '',
+              content: content,
+              type: 'hot',
+              tags: extractKeywords(content),
+              created_by_user_id: currentState.integratedHotMemories[0]?.created_by_user_id || '',
+              created_at: new Date()
+            };
+            
+            consolidatedMemories.push(consolidatedMemory);
+          }
+        }
+      }
+      
+      console.log(`整合成 ${consolidatedMemories.length} 個新記憶`);
+      console.log('整合後的記憶:', consolidatedMemories.map(m => m.content.substring(0, 100)));
+      
+      if (consolidatedMemories.length > 0) {
+        setState(prev => {
+          // 將所有原有熱記憶轉為冷記憶
+          const newColdMemories = [
+            ...prev.integratedColdMemories,
+            ...currentState.integratedHotMemories.map(m => ({ ...m, type: 'cold' as const }))
+          ];
+          
+          return {
+            ...prev,
+            integratedHotMemories: consolidatedMemories,
+            integratedColdMemories: newColdMemories
+          };
+        });
+      }
+      
+    } catch (error) {
+      console.error('整合熱記憶失敗:', error);
+    }
+  }, []);
 
   // 獲取相關記憶（用於生成系統提示）
   const getRelevantMemories = useCallback((context: string, maxCount: number = 10): AgentMemory[] => {
@@ -406,6 +330,15 @@ LLM 回應：${llmResponse}
     // 第二階段：整合所有的熱記憶給對話使用
     // 直接返回所有熱記憶，不進行過濾，因為第二階段已經通過 LLM 選擇了相關的記憶
     return currentState.integratedHotMemories.slice(0, maxCount);
+  }, []);
+
+  // 直接以伺服器快照覆寫本地記憶狀態
+  const setFromSnapshot = useCallback((hot: AgentMemory[], cold: AgentMemory[]) => {
+    setState(prev => ({
+      ...prev,
+      integratedHotMemories: hot || [],
+      integratedColdMemories: cold || [],
+    }));
   }, []);
 
   // 提取關鍵詞
@@ -417,14 +350,35 @@ LLM 回應：${llmResponse}
       .slice(0, 5);
   };
 
+  const updateMemoriesFromLLMResponse = useCallback(async (llmResponse: string, userInput: string, agentId: string, userId: string, activityId?: string, sessionId?: string) => {
+    try {
+      const keywords = extractKeywords(llmResponse + ' ' + userInput);
+      const newMemoryContent = `對方說: ${userInput}\n你回應: ${llmResponse}`;
+      const baseMemory = { agent_id: agentId, activity_id: activityId, session_id: sessionId, content: newMemoryContent, tags: keywords, created_by_user_id: userId } as any;
+      const hotMemory: AgentMemory = { ...baseMemory, _id: `temp_hot_${Date.now()}`, type: 'hot', created_at: new Date() };
+      const coldMemory: AgentMemory = { ...baseMemory, _id: `temp_cold_${Date.now()}`, type: 'cold', created_at: new Date() };
+      const hotRes = await fetch('/api/memories', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(hotMemory) });
+      const coldRes = await fetch('/api/memories', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(coldMemory) });
+      if (hotRes.ok && coldRes.ok) {
+        const hotResult = await hotRes.json();
+        const coldResult = await coldRes.json();
+        if (hotResult.success && coldResult.success) {
+          setState(prev => ({ ...prev, integratedHotMemories: [...prev.integratedHotMemories, { ...hotResult.data, type: 'hot' }], integratedColdMemories: [...prev.integratedColdMemories, { ...coldResult.data, type: 'cold' }] }));
+          setTimeout(async () => { await consolidateHotMemories(llmResponse); }, 100);
+        }
+      }
+    } catch {}
+  }, [consolidateHotMemories]);
+
   const actions = useMemo(() => ({
     initializeMemories,
     initializeMemoriesFromServer,
     findRelevantMemoriesForInput,
     updateMemoriesFromLLMResponse,
     getRelevantMemories,
-    consolidateHotMemories
-  }), [initializeMemories, initializeMemoriesFromServer, findRelevantMemoriesForInput, updateMemoriesFromLLMResponse, getRelevantMemories, consolidateHotMemories]);
+    consolidateHotMemories,
+    setFromSnapshot,
+  }), [initializeMemories, initializeMemoriesFromServer, findRelevantMemoriesForInput, updateMemoriesFromLLMResponse, getRelevantMemories, consolidateHotMemories, setFromSnapshot]);
 
   return {
     state,
