@@ -141,10 +141,10 @@ export default function ActivityChatPage() {
         setAgent(agentData);
         setCoursePackage(coursePackageData);
 
-        // 初始化記憶管理系統
-        if (agentData.memory_config?.memory_ids) {
-          memoryActions.initializeMemories(agentData.memory_config.memory_ids);
-        }
+        // 第一階段：初始化記憶管理系統（整合角色記憶和活動記憶）
+        const agentMemories = agentData.memory_config?.memory_ids || [];
+        const activityMemories = activityData.memory_ids || [];
+        await memoryActions.initializeMemories(agentMemories, activityMemories);
 
         console.log('活動資料載入成功:', activityData);
         console.log('代理人資料載入成功:', agentData);
@@ -202,7 +202,7 @@ export default function ActivityChatPage() {
     if (params.id) {
       loadActivityData();
     }
-  }, [params.id, fetchActivity, fetchAgent, fetchCoursePackage, loadChatSession, saveChatSession]);
+  }, [params.id, fetchActivity, fetchAgent, fetchCoursePackage, loadChatSession, saveChatSession, memoryActions.initializeMemories]);
 
   // 發送訊息
   const handleSendMessage = async () => {
@@ -212,6 +212,11 @@ export default function ActivityChatPage() {
     setCurrentMessage('');
 
     try {
+      // 第二階段：用戶輸入時查找相關記憶
+      console.log('=== 開始處理用戶輸入 ===');
+
+      await memoryActions.findRelevantMemoriesForInput(message);
+
       // 準備發送給 OpenAI 的訊息
       const userMessage: ChatMessage = {
         id: crypto.randomUUID(),
@@ -270,34 +275,22 @@ export default function ActivityChatPage() {
         setChatSession(updatedSession);
         saveChatSession(activity._id.toString(), updatedSession);
 
-        // 從 LLM 回應更新記憶
+        // 第三階段：LLM回應後更新記憶
         if (agent && activity) {
-          console.log('=== LLM 回應記憶更新前 ===');
-          console.log('熱記憶:', memoryState.hotMemories);
-          console.log('冷記憶:', memoryState.coldMemories);
+          console.log('=== 開始第三階段記憶更新 ===');
+          console.log('當前整合記憶狀態:');
+          console.log('熱記憶:', memoryState.integratedHotMemories);
+          console.log('冷記憶:', memoryState.integratedColdMemories);
           
-          await memoryActions.updateMemoriesFromResponse(
+          await memoryActions.updateMemoriesFromLLMResponse(
             response, 
             message, 
             agent._id.toString(), 
             'default_user' // 暫時使用預設用戶ID
           );
           
-          console.log('=== LLM 回應記憶更新後 ===');
-          console.log('熱記憶數量:', memoryState.hotMemories);
-          console.log('冷記憶數量:', memoryState.coldMemories);
+          console.log('=== 第三階段記憶更新完成 ===');
         }
-        
-        // 整合記憶，確保熱記憶數量維持在限制內
-        console.log('=== 記憶整合前 ===');
-        console.log('熱記憶數量:', memoryState.hotMemories);
-        console.log('冷記憶數量:', memoryState.coldMemories);
-        
-        memoryActions.consolidateMemories();
-        
-        console.log('=== 記憶整合後 ===');
-        console.log('熱記憶數量:', memoryState.hotMemories);
-        console.log('冷記憶數量:', memoryState.coldMemories);
 
         // 檢查單元進度
         if (currentUnit) {
@@ -546,10 +539,13 @@ export default function ActivityChatPage() {
               <span className="text-sm text-gray-600">記憶:</span>
               <div className="flex items-center space-x-1">
                 <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded">
-                  熱: {memoryState.hotMemories.length}/{memoryState.maxHotMemories}
+                  熱: {memoryState.integratedHotMemories.length}
                 </span>
                 <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
-                  冷: {memoryState.coldMemories.length}
+                  冷: {memoryState.integratedColdMemories.length}
+                </span>
+                <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                  基礎: {memoryState.baseHotMemoryCount}
                 </span>
               </div>
             </div>
