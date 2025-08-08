@@ -1,17 +1,17 @@
 import { useState, useCallback } from 'react';
 import { ChatSession, ChatMessage, OpenAIChatMessage, SimpleChatRequest, SimpleChatResponse } from '@/types';
 
-// LocalStorage 鍵值
-const CHAT_SESSION_KEY = 'flowquest_chat_session_';
+// LocalStorage 鍵值（改為以 sessionId 為鍵）
+const CHAT_SESSION_KEY = 'flowquest_chat_session_by_id_';
 
 export function useChat() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 從 localStorage 載入聊天會話
-  const loadChatSession = useCallback((activityId: string): ChatSession | null => {
+  // 從 localStorage 載入聊天會話（以 sessionId 為鍵）
+  const loadChatSession = useCallback((sessionId: string): ChatSession | null => {
     try {
-      const sessionData = localStorage.getItem(`${CHAT_SESSION_KEY}${activityId}`);
+      const sessionData = localStorage.getItem(`${CHAT_SESSION_KEY}${sessionId}`);
       if (sessionData) {
         const parsed = JSON.parse(sessionData);
         // 將日期字串轉換回 Date 物件
@@ -32,19 +32,19 @@ export function useChat() {
     }
   }, []);
 
-  // 儲存聊天會話到 localStorage
-  const saveChatSession = useCallback((activityId: string, session: ChatSession) => {
+  // 儲存聊天會話到 localStorage（以 sessionId 為鍵）
+  const saveChatSession = useCallback((sessionId: string, session: ChatSession) => {
     try {
-      localStorage.setItem(`${CHAT_SESSION_KEY}${activityId}`, JSON.stringify(session));
+      localStorage.setItem(`${CHAT_SESSION_KEY}${sessionId}`, JSON.stringify(session));
     } catch (error) {
       console.error('儲存聊天會話失敗:', error);
     }
   }, []);
 
-  // 清除聊天會話
-  const clearChatSession = useCallback((activityId: string) => {
+  // 清除聊天會話（以 sessionId 為鍵）
+  const clearChatSession = useCallback((sessionId: string) => {
     try {
-      localStorage.removeItem(`${CHAT_SESSION_KEY}${activityId}`);
+      localStorage.removeItem(`${CHAT_SESSION_KEY}${sessionId}`);
     } catch (error) {
       console.error('清除聊天會話失敗:', error);
     }
@@ -93,22 +93,22 @@ export function useChat() {
   }, []);
 
   // 重新開始聊天（清除會話）
-  const restartChat = useCallback((activityId: string) => {
-    clearChatSession(activityId);
+  const restartChat = useCallback((sessionId: string) => {
+    clearChatSession(sessionId);
   }, [clearChatSession]);
 
   // 取得所有聊天會話清單（用於管理）
-  const getAllChatSessions = useCallback((): { activityId: string; session: ChatSession }[] => {
-    const sessions: { activityId: string; session: ChatSession }[] = [];
+  const getAllChatSessions = useCallback((): { sessionId: string; session: ChatSession }[] => {
+    const sessions: { sessionId: string; session: ChatSession }[] = [];
     
     try {
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
         if (key && key.startsWith(CHAT_SESSION_KEY)) {
-          const activityId = key.replace(CHAT_SESSION_KEY, '');
-          const session = loadChatSession(activityId);
+          const sessionId = key.replace(CHAT_SESSION_KEY, '');
+          const session = loadChatSession(sessionId);
           if (session) {
-            sessions.push({ activityId, session });
+            sessions.push({ sessionId, session });
           }
         }
       }

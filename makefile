@@ -6,3 +6,6 @@ test:
 
 clean:
 	docker compose down -v --remove-orphans
+
+build:
+	cd app && docker build -t chat-agent .

@@ -1,18 +1,15 @@
-/**
- * FlowQuest - 報告相關類型定義
- */
-
 import { ObjectId } from './base';
+import type { AgentMemory } from './memory';
 
-// ================================
-// InteractionReport 報告紀錄
-// ================================
-export type UnitResultStatus = "passed" | "failed";
+export type UnitResultStatus = 'passed' | 'failed';
+
 export type ConversationLog = {
   role: string;
   content: string;
   timestamp: Date;
   system_prompt?: string;
+  memories?: AgentMemory[];
+  
 };
 
 export interface UnitResult {
@@ -24,16 +21,16 @@ export interface UnitResult {
   conversation_logs: ConversationLog[];
 }
 
-export interface InteractionReport {
+// SessionRecord: 以 session 為主體，承載整個對話與統計
+export interface SessionRecord {
   _id: ObjectId;
   activity_id: ObjectId;
   user_id: ObjectId;
-  session_id: ObjectId;
+  session_id: ObjectId; // 人類可讀的代號，但仍以字串存
   user_name: string;
   summary: string;
   unit_results: UnitResult[];
   generated_at: Date;
 }
 
-// 創建報告輸入格式
-export type CreateInteractionReportInput = Omit<InteractionReport, '_id' | 'generated_at'>;
+export type CreateSessionInput = Omit<SessionRecord, '_id' | 'generated_at'>; 
