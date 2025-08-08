@@ -303,59 +303,329 @@ export default function ActivityChatPage() {
     localStorage.setItem(`fq_user_name_${activityId}`, name);
     setSessionId(code);
 
-    // 透過後端 interactions 初始化
-    fetch('/api/interactions/initialize', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        activity_id: activityId,
-        user_id: 'default_user',
-        session_id: code,
-        user_name: name,
-      }),
-    })
-      .then((res) => res.json())
-      .then((json) => {
-        if (json?.success) {
-          setReportId(json.data?._id?.toString?.() || null);
-          try {
-            const reconstructed = reconstructChatSessionFromServer(json.data);
-            setChatSession(reconstructed);
-          } catch {}
-        }
-      })
-      .catch(() => {});
+    // 建立報告骨架
+    upsertSession({
+      activity_id: activityId,
+      user_id: 'default_user',
+      session_id: code,
+      user_name: name,
+      summary: '',
+      unit_results: [],
+    }).then((r) => setReportId(r._id.toString())).catch(() => {});
   };
 
   // 發送訊息
   const handleSendMessage = async () => {
-    if (!currentMessage.trim() || !activity || /* isLoading */ false || !sessionId) return;
+    if (!currentMessage.trim() || !activity || isLoading || !sessionId) return;
 
     const message = currentMessage.trim();
     setCurrentMessage('');
 
     try {
-      // 全交由後端 interactions 處理
-      const res = await fetch('/api/interactions/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      // 第二階段：用戶輸入時查找相關記憶
+      console.log('=== 開始處理用戶輸入 ===');
+
+      await memoryActions.findRelevantMemoriesForInput(message);
+
+      // 準備發送給 OpenAI 的訊息
+      const userMessage: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: 'user',
+        content: message,
+        timestamp: new Date(),
+        unit_id: currentUnit?._id.toString()
+      };
+
+      // 準備 OpenAI 的訊息格式
+      const systemPrompt = generateSystemPrompt(agent, currentUnit || null, coursePackage, message);
+      
+      // 調試：輸出系統提示內容
+      console.log('=== 系統提示 ===');
+      console.log(systemPrompt);
+      console.log('================');
+      
+
+      
+      const openAIMessages: any[] = [
+        {
+          role: 'system' as const,
+          content: systemPrompt
+        },
+        ...(chatSession?.messages || []).map(msg => ({
+          role: msg.role as 'user' | 'assistant',
+          content: msg.content
+        })),
+        {
+          role: 'user' as const,
+          content: message
+        }
+      ];
+
+      // 呼叫 OpenAI API
+      const response = await sendChatToOpenAI(openAIMessages);
+
+      if (response) {
+        const assistantMessage: ChatMessage = {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: response,
+          timestamp: new Date(),
+          unit_id: currentUnit?._id.toString()
+        };
+
+        // 更新對話紀錄
+        const updatedSession: ChatSession = {
           activity_id: activity._id.toString(),
-          user_id: 'default_user',
-          session_id: sessionId!,
-          user_name: userName || localStorage.getItem(`fq_user_name_${activity._id.toString()}`) || '',
-          message,
-        }),
-      });
-      const json = await res.json();
-      if (json?.success) {
+          current_unit_id: currentUnit?._id.toString() || '',
+          messages: [...(chatSession?.messages || []), userMessage, assistantMessage],
+          current_turn: (chatSession?.current_turn || 0) + 1,
+          is_completed: false,
+          started_at: chatSession?.started_at || new Date(),
+          updated_at: new Date()
+        };
+        
+        setChatSession(updatedSession);
+        // 改為僅透過 API 持久化
+
+        // 持續更新 Session（追加對話紀錄到當前單元）
         try {
-          const serverSession = json.data?.session;
-          const reconstructed = reconstructChatSessionFromServer(serverSession);
-          setChatSession(reconstructed);
-          if (!reportId) setReportId(serverSession?._id?.toString?.() || null);
-        } catch {}
+          if (currentUnit) {
+            const existingUnit = {
+              unit_id: currentUnit._id.toString(),
+              status: 'failed' as const,
+              turn_count: updatedSession.current_turn,
+              important_keywords: [],
+              standard_pass_rules: currentUnit.pass_condition?.value || [],
+              conversation_logs: [
+                ...(chatSession?.messages || []).map(m => ({ role: m.role, content: m.content, timestamp: m.timestamp })),
+                { role: 'user', content: message, timestamp: new Date(), system_prompt: systemPrompt, memories: [...memoryState.integratedHotMemories, ...memoryState.integratedColdMemories] },
+                { role: 'assistant', content: response, timestamp: new Date(), system_prompt: undefined, memories: [...memoryState.integratedHotMemories, ...memoryState.integratedColdMemories] }
+              ]
+            };
+
+            const r = await upsertSession({
+              activity_id: activity._id.toString(),
+              user_id: 'default_user',
+              session_id: sessionId!,
+              user_name: userName || localStorage.getItem(`fq_user_name_${activity._id.toString()}`) || '',
+              summary: '',
+              unit_results: [existingUnit],
+            });
+            console.log('Session upserted (chat-append):', r);
+            if (!reportId) setReportId(r._id.toString());
+          }
+        } catch (e) {
+          console.warn('更新 Session 失敗（對話階段）');
+        }
+
+        // 第三階段：LLM回應後更新記憶
+        if (agent && activity) {
+          console.log('=== 開始第三階段記憶更新 ===');
+          console.log('當前整合記憶狀態:');
+          console.log('熱記憶:', memoryState.integratedHotMemories);
+          console.log('冷記憶:', memoryState.integratedColdMemories);
+          
+          await memoryActions.updateMemoriesFromLLMResponse(
+            response, 
+            message, 
+            agent._id.toString(), 
+            'default_user' // 暫時使用預設用戶ID
+          );
+          
+          console.log('=== 第三階段記憶更新完成 ===');
+        }
+
+        // 檢查單元進度
+        if (currentUnit) {
+          const progress = await checkUnitProgress(
+            currentUnit,
+            updatedSession.messages.filter((m) => m.unit_id === currentUnit._id.toString()),
+            coursePackage || undefined
+          );
+          
+          if (progress.is_passed) {
+            console.log('單元完成！', progress);
+            
+            if (progress.is_course_completed) {
+              // 課程全部完成
+              console.log('恭喜！課程全部完成！');
+              
+              // 先發送當前關卡的結尾語（如果有的話）
+              let finalMessages = [...updatedSession.messages];
+              if (currentUnit.outro_message) {
+                const outroMessage: ChatMessage = {
+                  id: crypto.randomUUID(),
+                  role: 'assistant',
+                  content: currentUnit.outro_message,
+                  timestamp: new Date(),
+                  unit_id: currentUnit._id.toString()
+                };
+                finalMessages.push(outroMessage);
+              }
+              
+              // 標記會話為已完成
+              const completedSession: ChatSession = {
+                ...updatedSession,
+                messages: finalMessages,
+                is_completed: true
+              };
+              setChatSession(completedSession);
+              // 改為僅透過 API 持久化
+              upsertSession({
+                activity_id: activity._id.toString(),
+                user_id: 'default_user',
+                session_id: sessionId!,
+                user_name: userName || localStorage.getItem(`fq_user_name_${activity._id.toString()}`) || '',
+                summary: `課程完成於 ${new Date().toLocaleString('zh-TW')}`,
+                unit_results: [
+                  {
+                    unit_id: currentUnit._id.toString(),
+                    status: 'passed',
+                    turn_count: updatedSession.current_turn,
+                    important_keywords: currentUnit.pass_condition?.type === 'keyword' ? (currentUnit.pass_condition.value || []) : [],
+                    standard_pass_rules: currentUnit.pass_condition?.value || [],
+                    conversation_logs: updatedSession.messages.map(m => ({ role: m.role, content: m.content, timestamp: m.timestamp, system_prompt: systemPrompt, memories: [...memoryState.integratedHotMemories, ...memoryState.integratedColdMemories] }))
+                  }
+                ],
+              }).then((r) => setReportId(r._id.toString())).catch(() => {});
+              
+            } else if (progress.next_unit_id) {
+              // 切換到下一個關卡
+              console.log('切換到下一個關卡:', progress.next_unit_id);
+              
+              const nextUnit = getSortedUnits().find(unit => 
+                unit._id.toString() === progress.next_unit_id
+              );
+              
+              if (nextUnit && progress.next_unit_id) {
+                let transitionMessages = [...updatedSession.messages];
+                
+                // 1. 先添加當前關卡的結尾語（如果有的話）
+                if (currentUnit.outro_message) {
+                  const outroMessage: ChatMessage = {
+                    id: crypto.randomUUID(),
+                    role: 'assistant',
+                    content: currentUnit.outro_message,
+                    timestamp: new Date(),
+                    unit_id: currentUnit._id.toString()
+                  };
+                  transitionMessages.push(outroMessage);
+                }
+                
+                // 2. 然後添加下一關的開頭語（如果有的話）
+                if (nextUnit.intro_message) {
+                  const introMessage: ChatMessage = {
+                    id: crypto.randomUUID(),
+                    role: 'assistant',
+                    content: nextUnit.intro_message,
+                    timestamp: new Date(),
+                    unit_id: progress.next_unit_id
+                  };
+                  transitionMessages.push(introMessage);
+                }
+                
+                // 3. 更新會話到下一關
+                const nextUnitSession: ChatSession = {
+                  ...updatedSession,
+                  current_unit_id: progress.next_unit_id!,
+                  messages: transitionMessages
+                };
+                
+                setChatSession(nextUnitSession);
+                // 改為僅透過 API 持久化
+
+                // 標記當前單元通過 + 準備下一單元骨架
+                try {
+                  const r = await upsertSession({
+                    activity_id: activity._id.toString(),
+                    user_id: 'default_user',
+                    session_id: sessionId!,
+                    user_name: userName || localStorage.getItem(`fq_user_name_${activity._id.toString()}`) || '',
+                    summary: '',
+                    unit_results: [
+                      {
+                        unit_id: currentUnit._id.toString(),
+                        status: 'passed',
+                        turn_count: nextUnitSession.current_turn,
+                        important_keywords: currentUnit.pass_condition?.type === 'keyword' ? (currentUnit.pass_condition.value || []) : [],
+                        standard_pass_rules: currentUnit.pass_condition?.value || [],
+                        conversation_logs: nextUnitSession.messages.map(m => ({ role: m.role, content: m.content, timestamp: m.timestamp, system_prompt: systemPrompt, memories: [...memoryState.integratedHotMemories, ...memoryState.integratedColdMemories] }))
+                      },
+                      {
+                        unit_id: progress.next_unit_id,
+                        status: 'failed',
+                        turn_count: 0,
+                        important_keywords: [],
+                        standard_pass_rules: [],
+                        conversation_logs: nextUnit.intro_message
+                          ? [
+                              {
+                                role: 'assistant',
+                                content: nextUnit.intro_message,
+                                timestamp: new Date(),
+                                system_prompt: generateSystemPrompt(agent, nextUnit, coursePackage, ''),
+                                memories: [...memoryState.integratedHotMemories, ...memoryState.integratedColdMemories],
+                              },
+                            ]
+                          : []
+                      }
+                    ],
+                  });
+                  if (!reportId) setReportId(r._id.toString());
+                } catch {}
+              }
+            }
+          }
+        }
       }
+      else {
+        // 備援：即使無助理回覆，也要記錄使用者訊息並更新報告
+        const fallbackSession: ChatSession = {
+          activity_id: activity._id.toString(),
+          current_unit_id: currentUnit?._id.toString() || '',
+          messages: [...(chatSession?.messages || []), userMessage],
+          current_turn: chatSession?.current_turn || 0,
+          is_completed: false,
+          started_at: chatSession?.started_at || new Date(),
+          updated_at: new Date()
+        };
+
+        setChatSession(fallbackSession);
+        // 改為僅透過 API 持久化
+
+        // 更新報告（不增加回合數，僅追加用戶訊息）
+        try {
+          if (currentUnit) {
+            const existingUnit = {
+              unit_id: currentUnit._id.toString(),
+              status: 'failed' as const,
+              turn_count: fallbackSession.current_turn,
+              important_keywords: [],
+              standard_pass_rules: currentUnit.pass_condition?.value || [],
+              conversation_logs: [
+                ...(chatSession?.messages || []).map(m => ({ role: m.role, content: m.content, timestamp: m.timestamp })),
+                { role: 'user', content: message, timestamp: new Date(), system_prompt: systemPrompt, memories: [...memoryState.integratedHotMemories, ...memoryState.integratedColdMemories] }
+              ]
+            };
+
+            const r = await upsertSession({
+              activity_id: activity._id.toString(),
+              user_id: 'default_user',
+              session_id: sessionId!,
+              user_name: userName || localStorage.getItem(`fq_user_name_${activity._id.toString()}`) || '',
+              summary: '',
+              unit_results: [existingUnit],
+            });
+            console.log('Session upserted (fallback-append):', r);
+            if (!reportId) setReportId(r._id.toString());
+          }
+        } catch (e) {
+          console.warn('更新 Session 失敗（回覆失敗備援）');
+        }
+
+        return;
+      }
+      
     } catch (error) {
       console.error('發送訊息失敗:', error);
     }
@@ -403,40 +673,6 @@ export default function ActivityChatPage() {
   const getSortedUnits = () => {
     if (!coursePackage) return [];
     return [...coursePackage.units].sort((a, b) => a.order - b.order);
-  };
-
-  // 將後端 SessionRecord 重建為前端 ChatSession（僅取當前單元對話）
-  const reconstructChatSessionFromServer = (serverSession: any): ChatSession => {
-    const unitResults: any[] = serverSession?.unit_results || [];
-    // 當前單元：最後一個有對話的單元
-    const lastWithLogs = [...unitResults].reverse().find((u: any) => (u.conversation_logs?.length || 0) > 0);
-    const currentUnitId = lastWithLogs?.unit_id?.toString?.() || '';
-    // 將所有單元對話攤平成單一訊息串，依 timestamp 排序（隱性切關）
-    const allLogs: Array<{ unit_id: string; role: 'user'|'assistant'; content: string; timestamp: Date } > = [] as any;
-    for (const ur of unitResults) {
-      const uid = String(ur.unit_id);
-      for (const l of (ur.conversation_logs || [])) {
-        allLogs.push({ unit_id: uid, role: l.role as any, content: l.content, timestamp: new Date(l.timestamp) });
-      }
-    }
-    allLogs.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-    const messages: ChatMessage[] = allLogs.map((l, idx) => ({
-      id: `srv-${idx}-${Date.now()}`,
-      role: l.role,
-      content: l.content,
-      timestamp: l.timestamp,
-      unit_id: l.unit_id,
-    }));
-    const currentTurn = (unitResults.find((u: any) => String(u.unit_id) === String(currentUnitId))?.turn_count) || Math.floor(messages.filter(m => m.unit_id === currentUnitId && m.role === 'assistant').length);
-    return {
-      activity_id: (activity?._id || serverSession?.activity_id)?.toString?.() || '',
-      current_unit_id: currentUnitId,
-      messages,
-      current_turn: currentTurn,
-      is_completed: false,
-      started_at: messages[0]?.timestamp || new Date(),
-      updated_at: messages[messages.length - 1]?.timestamp || new Date(),
-    };
   };
 
   const currentUnit = getCurrentUnit();
