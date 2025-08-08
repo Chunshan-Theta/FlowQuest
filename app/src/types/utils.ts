@@ -160,38 +160,35 @@ export function validateAgentProfile(data: Partial<AgentProfile>): string[] {
     }
   } else if (Object.keys(data).length === 0) {
     // 如果是完全空的對象，不要求 name
-  } else if (data.name === undefined && data.persona === undefined && data.memory_config === undefined) {
+  } else if (data.name === undefined && data.persona === undefined && (data as any).memories === undefined) {
     // 如果所有主要欄位都是 undefined，不要求 name
-  } else if (data.memory_config !== undefined && data.name === undefined && data.persona === undefined) {
-    // 如果只更新記憶配置，不要求 name
+  } else if (((data as any).memories !== undefined) && data.name === undefined && data.persona === undefined) {
+    // 如果只更新記憶，不要求 name
   } else {
     // 如果提供了其他欄位但沒有 name，則要求 name
     errors.push('代理人名稱為必填欄位');
   }
   
-  if (data.memory_config) {
-    // 驗證記憶配置中的記憶陣列
-    if (data.memory_config.memory_ids) {
-      data.memory_config.memory_ids.forEach((memory: any, index: number) => {
-        // 跳過臨時 ID 的驗證（以 temp_ 開頭的 ID）
-        if (memory._id && !memory._id.startsWith('temp_') && !isValidObjectId(memory._id)) {
-          errors.push(`第 ${index + 1} 個記憶 ID 格式無效`);
-        }
-        if (memory.agent_id && !isValidObjectId(memory.agent_id)) {
-          errors.push(`第 ${index + 1} 個記憶的 agent_id 格式無效`);
-        }
-        if (memory.created_by_user_id && !memory.created_by_user_id.startsWith('temp_') && !isValidObjectId(memory.created_by_user_id)) {
-          errors.push(`第 ${index + 1} 個記憶的 created_by_user_id 格式無效`);
-        }
-        // 驗證記憶內容
-        if (!memory.content || memory.content.trim().length === 0) {
-          errors.push(`第 ${index + 1} 個記憶內容為必填欄位`);
-        }
-        if (memory.type && !isValidMemoryType(memory.type)) {
-          errors.push(`第 ${index + 1} 個記憶類型無效`);
-        }
-      });
-    }
+  // 新版：驗證頂層 memories 陣列
+  const topLevelMemories = (data as any).memories as any[] | undefined;
+  if (Array.isArray(topLevelMemories)) {
+    topLevelMemories.forEach((memory: any, index: number) => {
+      if (memory._id && !memory._id.startsWith('temp_') && !isValidObjectId(memory._id)) {
+        errors.push(`第 ${index + 1} 個記憶 ID 格式無效`);
+      }
+      if (memory.agent_id && !isValidObjectId(memory.agent_id)) {
+        errors.push(`第 ${index + 1} 個記憶的 agent_id 格式無效`);
+      }
+      if (memory.created_by_user_id && !memory.created_by_user_id.startsWith('temp_') && !isValidObjectId(memory.created_by_user_id)) {
+        errors.push(`第 ${index + 1} 個記憶的 created_by_user_id 格式無效`);
+      }
+      if (!memory.content || memory.content.trim().length === 0) {
+        errors.push(`第 ${index + 1} 個記憶內容為必填欄位`);
+      }
+      if (memory.type && !isValidMemoryType(memory.type)) {
+        errors.push(`第 ${index + 1} 個記憶類型無效`);
+      }
+    });
   }
   
   return errors;
@@ -258,10 +255,24 @@ export function validateActivity(data: Partial<Activity>): string[] {
     errors.push('活動狀態無效');
   }
   
-  if (data.memory_ids) {
-    data.memory_ids.forEach((memoryId: any, index: number) => {
-      if (!isValidObjectId(memoryId)) {
+  // 新版：驗證頂層 memories 陣列（每個元素為 AgentMemory 物件）
+  const topLevelMemories = (data as any).memories as any[] | undefined;
+  if (Array.isArray(topLevelMemories)) {
+    topLevelMemories.forEach((memory: any, index: number) => {
+      if (memory._id && !memory._id.startsWith('temp_') && !isValidObjectId(memory._id)) {
         errors.push(`第 ${index + 1} 個記憶 ID 格式無效`);
+      }
+      if (memory.agent_id && !isValidObjectId(memory.agent_id)) {
+        errors.push(`第 ${index + 1} 個記憶的 agent_id 格式無效`);
+      }
+      if (memory.created_by_user_id && !memory.created_by_user_id.startsWith('temp_') && !isValidObjectId(memory.created_by_user_id)) {
+        errors.push(`第 ${index + 1} 個記憶的 created_by_user_id 格式無效`);
+      }
+      if (!memory.content || memory.content.trim().length === 0) {
+        errors.push(`第 ${index + 1} 個記憶內容為必填欄位`);
+      }
+      if (memory.type && !isValidMemoryType(memory.type)) {
+        errors.push(`第 ${index + 1} 個記憶類型無效`);
       }
     });
   }

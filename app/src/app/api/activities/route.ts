@@ -23,9 +23,22 @@ export async function GET(request: NextRequest) {
 
     const activities = await collection.find(filter).sort({ start_time: -1 }).toArray();
     
+    // Only output the new schema fields
+    const normalized: Activity[] = activities.map((a: any) => ({
+      _id: a._id,
+      name: a.name,
+      course_package_id: a.course_package_id,
+      agent_profile_id: a.agent_profile_id,
+      current_unit_id: a.current_unit_id,
+      status: a.status,
+      memories: a.memories ?? [],
+      created_at: a.created_at,
+      updated_at: a.updated_at,
+    }));
+    
     const response: ApiResponse<Activity[]> = {
       success: true,
-      data: activities,
+      data: normalized,
     };
     
     return NextResponse.json(response);
@@ -68,10 +81,21 @@ export async function POST(request: NextRequest) {
     }
 
     // 準備新活動資料
+    const incomingMemories = Array.isArray((activityData as any).memories) ? (activityData as any).memories : [];
+    const normalizedMemories = incomingMemories.map((m: any) => ({
+      _id: typeof m._id === 'string' && m._id.length === 24 ? m._id : generateObjectId(),
+      agent_id: m.agent_id ?? activityData.agent_profile_id,
+      type: m.type,
+      content: m.content,
+      tags: Array.isArray(m.tags) ? m.tags : [],
+      created_by_user_id: m.created_by_user_id ?? 'temp_creator',
+      created_at: m.created_at ? new Date(m.created_at) : new Date(),
+    }));
+
     const newActivity: Activity = {
       _id: generateObjectId(),
       ...activityData,
-      memory_ids: [], // 確保初始化為空陣列
+      memories: normalizedMemories,
       created_at: new Date(),
       updated_at: new Date(),
     };

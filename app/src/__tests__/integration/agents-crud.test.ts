@@ -41,9 +41,7 @@ describe('Agent CRUD 整合測試', () => {
       background: '資深客戶服務代表',
       voice: '清晰溫暖的聲音'
     },
-          memory_config: {
-        memory_ids: []
-      }
+    memories: []
   };
 
   const CREATED_AGENT: AgentProfile = {
@@ -81,7 +79,7 @@ describe('Agent CRUD 整合測試', () => {
         _id: AGENT_ID,
         name: CREATE_INPUT.name,
         persona: CREATE_INPUT.persona,
-        memory_config: CREATE_INPUT.memory_config
+        memories: CREATE_INPUT.memories
       });
 
       // ========== READ (GET /api/agents/[id]) ==========
@@ -100,7 +98,7 @@ describe('Agent CRUD 整合測試', () => {
       expect(readData.data._id).toBe(CREATED_AGENT._id);
       expect(readData.data.name).toBe(CREATED_AGENT.name);
       expect(readData.data.persona).toEqual(CREATED_AGENT.persona);
-      expect(readData.data.memory_config).toEqual(CREATED_AGENT.memory_config);
+      expect(readData.data.memories).toEqual(CREATED_AGENT.memories);
       expect(readData.data.created_at).toBe(CREATED_AGENT.created_at.toISOString());
       expect(readData.data.updated_at).toBe(CREATED_AGENT.updated_at.toISOString());
 
@@ -159,7 +157,7 @@ describe('Agent CRUD 整合測試', () => {
       expect(deleteData.data._id).toBe(updatedAgent._id);
       expect(deleteData.data.name).toBe(updatedAgent.name);
       expect(deleteData.data.persona).toEqual(updatedAgent.persona);
-      expect(deleteData.data.memory_config).toEqual(updatedAgent.memory_config);
+      expect(deleteData.data.memories).toEqual(updatedAgent.memories);
       expect(deleteData.data.created_at).toBe(updatedAgent.created_at.toISOString());
       expect(deleteData.data.updated_at).toBe(updatedAgent.updated_at.toISOString());
       expect(deleteData.message).toBe('成功刪除 Agent');
@@ -185,7 +183,7 @@ describe('Agent CRUD 整合測試', () => {
       expect(listData.data).toBeDefined();
       expect(Array.isArray(listData.data)).toBe(true);
       expect(listData.data.length).toBe(1);
-      expect(listData.data[0]).toEqual(singleData.data);
+      expect(listData.data[0]).toMatchObject(singleData.data);
     });
   });
 

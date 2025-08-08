@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { AgentProfile, CreateAgentProfileInput, ApiResponse, AgentMemory } from '@/types';
-import { useMemories } from '@/hooks/useMemories';
+
 import { MemoryForm } from '@/components/MemoryForm';
 
 interface AgentFormProps {
@@ -21,9 +21,7 @@ function AgentForm({ agent, onSubmit, onCancel, isSubmitting = false }: AgentFor
       background: agent?.persona.background || '',
       voice: agent?.persona.voice || '',
     },
-    memory_config: {
-      memory_ids: agent?.memory_config?.memory_ids || [],
-    },
+    memories: agent?.memories || [],
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -52,30 +50,23 @@ function AgentForm({ agent, onSubmit, onCancel, isSubmitting = false }: AgentFor
   const handleMemoryChange = (memory: AgentMemory, checked: boolean) => {
     setFormData(prev => ({
       ...prev,
-      memory_config: {
-        ...prev.memory_config!,
-        memory_ids: checked 
-          ? [...prev.memory_config!.memory_ids, memory]
-          : prev.memory_config!.memory_ids.filter(m => m._id !== memory._id)
-      }
+      memories: checked 
+        ? [...(prev.memories || []), memory]
+        : (prev.memories || []).filter(m => m._id !== memory._id)
     }));
   };
 
   const handleAddMemory = (memory: AgentMemory) => {
-    // 為新記憶設置正確的欄位
     const newMemory: AgentMemory = {
       ...memory,
-      _id: `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, // 生成唯一的臨時 ID
-      agent_id: agent?._id || '', // 設置 agent_id
-      created_by_user_id: 'temp_user_id', // 臨時用戶 ID，實際應用中應該從認證系統獲取
+      _id: `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      agent_id: agent?._id || '',
+      created_by_user_id: 'temp_user_id',
     };
     
     setFormData(prev => ({
       ...prev,
-      memory_config: {
-        ...prev.memory_config!,
-        memory_ids: [...prev.memory_config!.memory_ids, newMemory]
-      }
+      memories: [...(prev.memories || []), newMemory]
     }));
     setShowMemoryForm(false);
   };
@@ -171,7 +162,7 @@ function AgentForm({ agent, onSubmit, onCancel, isSubmitting = false }: AgentFor
                 熱記憶 (Hot Memories)
               </label>
               <div className="space-y-2 max-h-40 overflow-y-auto border border-gray-200 rounded-md p-3">
-                {formData.memory_config?.memory_ids.filter(m => m.type === 'hot').map((memory) => (
+                {(formData.memories || []).filter(m => m.type === 'hot').map((memory) => (
                   <div key={memory._id} className="flex items-center justify-between p-2 bg-red-50 rounded">
                     <span className="text-sm text-gray-700 flex-1">{memory.content}</span>
                     <button
@@ -184,7 +175,7 @@ function AgentForm({ agent, onSubmit, onCancel, isSubmitting = false }: AgentFor
                     </button>
                   </div>
                 ))}
-                {formData.memory_config?.memory_ids.filter(m => m.type === 'hot').length === 0 && (
+                {(formData.memories || []).filter(m => m.type === 'hot').length === 0 && (
                   <p className="text-sm text-gray-500">暫無熱記憶</p>
                 )}
               </div>
@@ -195,7 +186,7 @@ function AgentForm({ agent, onSubmit, onCancel, isSubmitting = false }: AgentFor
                 冷記憶 (Cold Memories)
               </label>
               <div className="space-y-2 max-h-40 overflow-y-auto border border-gray-200 rounded-md p-3">
-                {formData.memory_config?.memory_ids.filter(m => m.type === 'cold').map((memory) => (
+                {(formData.memories || []).filter(m => m.type === 'cold').map((memory) => (
                   <div key={memory._id} className="flex items-center justify-between p-2 bg-blue-50 rounded">
                     <span className="text-sm text-gray-700 flex-1">{memory.content}</span>
                     <button
@@ -208,7 +199,7 @@ function AgentForm({ agent, onSubmit, onCancel, isSubmitting = false }: AgentFor
                     </button>
                   </div>
                 ))}
-                {formData.memory_config?.memory_ids.filter(m => m.type === 'cold').length === 0 && (
+                {(formData.memories || []).filter(m => m.type === 'cold').length === 0 && (
                   <p className="text-sm text-gray-500">暫無冷記憶</p>
                 )}
               </div>
@@ -426,15 +417,15 @@ export default function AgentsPage() {
                       <span className="font-medium text-gray-600">聲音：</span>
                       <span className="text-gray-800">{agent.persona.voice}</span>
                     </div>
-                    {agent.memory_config && (
+                    {((agent.memories && agent.memories.length > 0) || agent.memory_config) && (
                       <>
                         <div>
                           <span className="font-medium text-gray-600">熱記憶：</span>
-                          <span className="text-gray-800">{agent.memory_config.memory_ids.filter(m => m.type === 'hot').length} 個</span>
+                          <span className="text-gray-800">{(agent.memories || []).filter(m => m.type === 'hot').length} 個</span>
                         </div>
                         <div>
                           <span className="font-medium text-gray-600">冷記憶：</span>
-                          <span className="text-gray-800">{agent.memory_config.memory_ids.filter(m => m.type === 'cold').length} 個</span>
+                          <span className="text-gray-800">{(agent.memories || []).filter(m => m.type === 'cold').length} 個</span>
                         </div>
                       </>
                     )}

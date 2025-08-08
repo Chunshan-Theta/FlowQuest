@@ -31,7 +31,7 @@ describe('Activity Individual Memory API', () => {
     course_package_id: '507f1f77bcf86cd799439012',
     agent_profile_id: '507f1f77bcf86cd799439013',
     status: 'online',
-    memory_ids: [
+    memories: [
       {
         _id: '507f1f77bcf86cd799439014',
         agent_id: '507f1f77bcf86cd799439013',
@@ -91,7 +91,7 @@ describe('Activity Individual Memory API', () => {
 
     it('should return 404 when memory not found', async () => {
       // 準備
-      const activityWithoutTargetMemory = { ...mockActivity, memory_ids: [] };
+      const activityWithoutTargetMemory = { ...mockActivity, memories: [] };
       mockCollection.findOne.mockResolvedValue(activityWithoutTargetMemory);
       const request = new NextRequest('http://localhost:3000/api/activities/507f1f77bcf86cd799439011/memories/507f1f77bcf86cd799439014');
 
@@ -175,7 +175,7 @@ describe('Activity Individual Memory API', () => {
 
     it('should return 404 when memory not found', async () => {
       // 準備
-      const activityWithoutTargetMemory = { ...mockActivity, memory_ids: [] };
+      const activityWithoutTargetMemory = { ...mockActivity, memories: [] };
       mockCollection.findOne.mockResolvedValue(activityWithoutTargetMemory);
       const request = new NextRequest('http://localhost:3000/api/activities/507f1f77bcf86cd799439011/memories/507f1f77bcf86cd799439014', {
         method: 'PUT',

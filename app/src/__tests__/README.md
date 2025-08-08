@@ -75,10 +75,7 @@ src/__tests__/
     background: string;
     voice: string;
   };
-  memory_config: {
-    memory_ids: AgentMemory[];
-    cold_memory_ids: AgentMemory[];
-  };
+  memories: AgentMemory[];
 }
 
 // 輸出格式 (AgentProfile)
@@ -86,7 +83,7 @@ src/__tests__/
   _id: ObjectId;           // 系統自動生成
   name: string;            // 保持輸入值
   persona: {...};          // 保持輸入結構
-  memory_config: {...};    // 保持輸入結構
+  memories: AgentMemory[]; // 使用頂層 memories
   created_at: Date;        // 系統自動生成
   updated_at: Date;        // 系統自動生成
 }

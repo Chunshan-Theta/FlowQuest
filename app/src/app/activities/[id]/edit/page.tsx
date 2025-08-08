@@ -15,8 +15,6 @@ interface ActivityFormProps {
   isSubmitting?: boolean;
 }
 
-
-
 function ActivityForm({ 
   activity, 
   onSubmit, 
@@ -50,7 +48,7 @@ function ActivityForm({
     course_package_id: activity?.course_package_id || '',
     agent_profile_id: activity?.agent_profile_id || '',
     status: activity?.status || 'online',
-    memory_ids: activity?.memory_ids || [],
+    memories: activity?.memories || [],
   });
 
   useEffect(() => {
@@ -66,8 +64,6 @@ function ActivityForm({
     }
     onSubmit(formData);
   };
-
-
 
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
@@ -281,7 +277,7 @@ export default function EditActivityPage() {
         const activityId = params.id as string;
         const activityData = await fetchActivity(activityId);
         setActivity(activityData);
-        setMemories(activityData.memory_ids || []);
+        setMemories((activityData as any).memories || []);
       } catch (err) {
         setError(err instanceof Error ? err.message : '載入活動失敗');
       } finally {
@@ -298,25 +294,18 @@ export default function EditActivityPage() {
     if (!activity) return;
     
     try {
-      console.log('Creating memory for activity:', activity._id);
-      console.log('Memory data:', memory);
-      
       const memoryData: CreateAgentMemoryInput = {
         agent_id: activity.agent_profile_id,
         type: memory.type,
         content: memory.content,
         tags: memory.tags,
-        created_by_user_id: '507f1f77bcf86cd799439011', // 假設的用戶 ID
+        created_by_user_id: '507f1f77bcf86cd799439011',
       };
 
-      console.log('Sending memory data:', memoryData);
       const newMemory = await createActivityMemory(activity._id, memoryData);
-      console.log('Created memory:', newMemory);
-      
       setMemories(prev => [...prev, newMemory]);
       setShowMemoryForm(false);
     } catch (err) {
-      console.error('創建記憶失敗:', err);
       alert('創建記憶失敗: ' + (err instanceof Error ? err.message : '未知錯誤'));
     }
   };
@@ -329,7 +318,6 @@ export default function EditActivityPage() {
       setMemories(prev => prev.map(m => m._id === memory._id ? updatedMemory : m));
       setEditingMemory(null);
     } catch (err) {
-      console.error('更新記憶失敗:', err);
       alert('更新記憶失敗: ' + (err instanceof Error ? err.message : '未知錯誤'));
     }
   };
@@ -343,7 +331,6 @@ export default function EditActivityPage() {
       await deleteActivityMemory(activity._id, memory._id);
       setMemories(prev => prev.filter(m => m._id !== memory._id));
     } catch (err) {
-      console.error('刪除記憶失敗:', err);
       alert('刪除記憶失敗: ' + (err instanceof Error ? err.message : '未知錯誤'));
     }
   };
@@ -353,15 +340,13 @@ export default function EditActivityPage() {
     
     try {
       setIsSubmitting(true);
-      // 將記憶資料加入到提交資料中
       const submitData = {
         ...data,
-        memory_ids: memories
+        memories
       };
       await updateActivity(activity._id, submitData);
       router.push(`/activities/${activity._id}`);
     } catch (error) {
-      console.error('更新活動失敗:', error);
       setError('更新活動失敗');
     } finally {
       setIsSubmitting(false);

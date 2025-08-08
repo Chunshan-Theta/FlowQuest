@@ -19,9 +19,8 @@ export interface AgentProfile {
   _id: ObjectId;
   name: string;
   persona: AgentPersona;
-  memory_config?: {
-    memory_ids: AgentMemory[];
-  };
+  // 直接在頂層使用 memories 陣列
+  memories?: AgentMemory[];
   created_at: Date;
   updated_at: Date;
 }

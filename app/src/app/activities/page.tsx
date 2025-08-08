@@ -25,7 +25,7 @@ function ActivityForm({ activity, onSubmit, onCancel, isSubmitting = false }: Ac
     course_package_id: activity?.course_package_id || '',
     agent_profile_id: activity?.agent_profile_id || '',
     status: activity?.status || 'online',
-    memory_ids: activity?.memory_ids || [],
+    memories: activity?.memories || [],
   });
 
   useEffect(() => {
@@ -45,24 +45,23 @@ function ActivityForm({ activity, onSubmit, onCancel, isSubmitting = false }: Ac
   const handleMemoryChange = (memory: AgentMemory, checked: boolean) => {
     setFormData(prev => ({
       ...prev,
-      memory_ids: checked 
-        ? [...(prev.memory_ids || []), memory]
-        : (prev.memory_ids || []).filter(m => m._id !== memory._id)
+      memories: checked 
+        ? [...(prev.memories || []), memory]
+        : (prev.memories || []).filter((m: AgentMemory) => m._id !== memory._id)
     }));
   };
 
   const handleAddMemory = (memory: AgentMemory) => {
-    // 為新記憶設置正確的欄位
     const newMemory: AgentMemory = {
       ...memory,
-      _id: `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, // 生成唯一的臨時 ID
-      agent_id: formData.agent_profile_id || '', // 設置 agent_id
-      created_by_user_id: 'temp_user_id', // 臨時用戶 ID，實際應用中應該從認證系統獲取
+      _id: `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      agent_id: formData.agent_profile_id || '',
+      created_by_user_id: 'temp_user_id',
     };
     
     setFormData(prev => ({
       ...prev,
-      memory_ids: [...(prev.memory_ids || []), newMemory]
+      memories: [...(prev.memories || []), newMemory]
     }));
     setShowMemoryForm(false);
   };
@@ -139,7 +138,7 @@ function ActivityForm({ activity, onSubmit, onCancel, isSubmitting = false }: Ac
 
             {/* 活動狀態 */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block textsm font-medium text-gray-700 mb-1">
                 活動狀態
               </label>
               <select
@@ -171,7 +170,7 @@ function ActivityForm({ activity, onSubmit, onCancel, isSubmitting = false }: Ac
                     熱記憶 (Hot Memories)
                   </label>
                   <div className="space-y-2 max-h-40 overflow-y-auto border border-gray-200 rounded-md p-3">
-                    {formData.memory_ids?.filter(m => m.type === 'hot').map((memory) => (
+                    {(formData.memories || []).filter((m: AgentMemory) => m.type === 'hot').map((memory: AgentMemory) => (
                       <div key={memory._id} className="flex items-center justify-between p-2 bg-red-50 rounded">
                         <span className="text-sm text-gray-700 flex-1">{memory.content}</span>
                         <button
@@ -184,7 +183,7 @@ function ActivityForm({ activity, onSubmit, onCancel, isSubmitting = false }: Ac
                         </button>
                       </div>
                     ))}
-                    {formData.memory_ids?.filter(m => m.type === 'hot').length === 0 && (
+                    {(formData.memories || []).filter((m: AgentMemory) => m.type === 'hot').length === 0 && (
                       <p className="text-sm text-gray-500">暫無熱記憶</p>
                     )}
                   </div>
@@ -195,7 +194,7 @@ function ActivityForm({ activity, onSubmit, onCancel, isSubmitting = false }: Ac
                     冷記憶 (Cold Memories)
                   </label>
                   <div className="space-y-2 max-h-40 overflow-y-auto border border-gray-200 rounded-md p-3">
-                    {formData.memory_ids?.filter(m => m.type === 'cold').map((memory) => (
+                    {(formData.memories || []).filter((m: AgentMemory) => m.type === 'cold').map((memory: AgentMemory) => (
                       <div key={memory._id} className="flex items-center justify-between p-2 bg-blue-50 rounded">
                         <span className="text-sm text-gray-700 flex-1">{memory.content}</span>
                         <button
@@ -208,7 +207,7 @@ function ActivityForm({ activity, onSubmit, onCancel, isSubmitting = false }: Ac
                         </button>
                       </div>
                     ))}
-                    {formData.memory_ids?.filter(m => m.type === 'cold').length === 0 && (
+                    {(formData.memories || []).filter((m: AgentMemory) => m.type === 'cold').length === 0 && (
                       <p className="text-sm text-gray-500">暫無冷記憶</p>
                     )}
                   </div>
@@ -251,12 +250,10 @@ export default function ActivitiesPage() {
     fetchActivities();
   }, [fetchActivities]);
 
-  // 點擊活動卡片查看詳情
   const handleActivityClick = (activityId: string) => {
     router.push(`/activities/${activityId}`);
   };
 
-  // 創建或更新活動
   const handleSubmit = async (data: CreateActivityInput) => {
     try {
       setIsSubmitting(true);
@@ -276,7 +273,6 @@ export default function ActivitiesPage() {
     }
   };
 
-  // 刪除活動
   const handleDelete = async (id: string) => {
     if (!confirm('確定要刪除這個活動嗎？')) return;
     
@@ -287,7 +283,6 @@ export default function ActivitiesPage() {
     }
   };
 
-  // 過濾活動
   const filteredActivities = activities.filter(activity => {
     if (statusFilter && activity.status !== statusFilter) return false;
     return true;
@@ -377,7 +372,6 @@ export default function ActivitiesPage() {
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {filteredActivities.map((activity) => (
                 <div key={activity._id} className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-200">
-                  {/* 可點擊的卡片內容區域 */}
                   <div 
                     className="p-6 cursor-pointer"
                     onClick={() => handleActivityClick(activity._id)}
@@ -402,15 +396,15 @@ export default function ActivitiesPage() {
                         <span className="font-medium text-gray-600">課程包 ID：</span>
                         <span className="text-gray-800">{activity.course_package_id}</span>
                       </div>
-                      {activity.memory_ids && (
+                      {activity.memories && (
                         <>
                           <div>
                             <span className="font-medium text-gray-600">熱記憶：</span>
-                            <span className="text-gray-800">{activity.memory_ids.filter(m => m.type === 'hot').length} 個</span>
+                            <span className="text-gray-800">{(activity.memories || []).filter((m: AgentMemory) => m.type === 'hot').length} 個</span>
                           </div>
                           <div>
                             <span className="font-medium text-gray-600">冷記憶：</span>
-                            <span className="text-gray-800">{activity.memory_ids.filter(m => m.type === 'cold').length} 個</span>
+                            <span className="text-gray-800">{(activity.memories || []).filter((m: AgentMemory) => m.type === 'cold').length} 個</span>
                           </div>
                         </>
                       )}
@@ -422,12 +416,11 @@ export default function ActivitiesPage() {
                     </div>
                   </div>
 
-                  {/* 操作按鈕區域 - 不在可點擊區域內 */}
                   <div className="px-6 pb-4">
                     <div className="flex gap-2 justify-end">
                       <button
                         onClick={(e) => {
-                          e.stopPropagation(); // 防止觸發卡片點擊
+                          e.stopPropagation();
                           setEditingActivity(activity);
                           setShowForm(true);
                         }}
@@ -438,7 +431,7 @@ export default function ActivitiesPage() {
                       </button>
                       <button
                         onClick={(e) => {
-                          e.stopPropagation(); // 防止觸發卡片點擊
+                          e.stopPropagation();
                           handleDelete(activity._id);
                         }}
                         className="text-red-600 hover:text-red-800 p-1"

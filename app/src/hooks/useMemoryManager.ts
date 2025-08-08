@@ -80,8 +80,10 @@ export function useMemoryManager() {
         try {
           const res = await fetch(`/api/agents/${agentId}`);
           const json = await res.json();
-          if (json?.success && json?.data?.memory_config?.memory_ids) {
-            return json.data.memory_config.memory_ids as AgentMemory[];
+          if (json?.success) {
+            const data = json.data;
+            if (Array.isArray(data?.memories)) return data.memories as AgentMemory[];
+            
           }
         } catch {}
         return [] as AgentMemory[];
@@ -203,7 +205,7 @@ ${coldMemoriesText}
      
      const currentState = stateRef.current;
      const currentHotCount = currentState.integratedHotMemories.length;
-     const targetCount = currentState.baseHotMemoryCount;
+     const targetCount = currentState.baseHotMemoryCount > 3 ? currentState.baseHotMemoryCount : 3;
      
         console.log(`當前熱記憶數量: ${currentHotCount}, 目標數量: ${targetCount}`);
         console.log('當前熱記憶:', currentState.integratedHotMemories.map(m => ({

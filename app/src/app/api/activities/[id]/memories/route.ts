@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Activity, AgentMemory, CreateAgentMemoryInput, ApiResponse, isValidObjectId, generateObjectId } from '@/types';
-import { getActivitiesCollection, getDatabase } from '@/lib/mongodb';
+import { AgentMemory, CreateAgentMemoryInput, ApiResponse, isValidObjectId, generateObjectId } from '@/types';
+import { getActivitiesCollection } from '@/lib/mongodb';
 
 interface RouteParams {
   params: Promise<{
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const response: ApiResponse<AgentMemory[]> = {
       success: true,
-      data: activity.memory_ids || [],
+      data: (activity as any).memories || [],
     };
     
     return NextResponse.json(response);
@@ -100,11 +100,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       created_at: new Date(),
     };
 
-    // 將記憶添加到活動的 memory_ids 陣列中
+    // 將記憶添加到活動的 memories 陣列中
     const updateResult = await activitiesCollection.updateOne(
       { _id: id },
       { 
-        $push: { memory_ids: newMemory },
+        $push: { memories: newMemory },
         $set: { updated_at: new Date() }
       }
     );

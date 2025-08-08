@@ -60,14 +60,14 @@ export default function ActivityChatPage() {
 
     // 添加當前關卡資訊
     if (currentUnit) {
-      prompt += `\n\n當前關卡：${currentUnit.title}`;
+      // prompt += `\n\n當前關卡：${currentUnit.title}`;
       
       // 添加角色設定
       if (currentUnit.agent_role) {
         prompt += `\n你在這個關卡的角色：${currentUnit.agent_role}`;
       }
       if (currentUnit.user_role) {
-        prompt += `\n學習者的角色：${currentUnit.user_role}`;
+        prompt += `\n對方角色：${currentUnit.user_role}`;
       }
 
       // 添加行為提示
@@ -87,7 +87,7 @@ export default function ActivityChatPage() {
 
       // 添加關卡限制
       if (currentUnit.max_turns && currentUnit.max_turns > 0) {
-        prompt += `\n對話回合限制：最多 ${currentUnit.max_turns} 回合`;
+        // prompt += `\n對話回合限制：最多 ${currentUnit.max_turns} 回合`;
       }
     }
 
@@ -95,7 +95,7 @@ export default function ActivityChatPage() {
     if (context) {
       const relevantMemories = memoryActions.getRelevantMemories(context, 5);
       if (relevantMemories.length > 0) {
-        prompt += `\n\n相關記憶：`;
+        prompt += `\n\n你的角色記憶：`;
         relevantMemories.forEach((memory, index) => {
           prompt += `\n${index + 1}. ${memory.content}`;
           if (memory.tags.length > 0) {
@@ -106,7 +106,7 @@ export default function ActivityChatPage() {
     }
 
     // 添加角色指引
-    prompt += `\n\n請確定角色立場在進行回應。`;
+    prompt += `\n\n請基於你的角色性格進行對話扮演，確保回應是符合覺色性格，並保持一致的回應立場在進行回應。`;
 
     return prompt;
   };
@@ -142,8 +142,8 @@ export default function ActivityChatPage() {
         setCoursePackage(coursePackageData);
 
         // 第一階段：初始化記憶管理系統（整合角色記憶和活動記憶）
-        const agentMemories = agentData.memory_config?.memory_ids || [];
-        const activityMemories = activityData.memory_ids || [];
+        const agentMemories = agentData.memories || [];
+        const activityMemories = (activityData as any).memories || [];
         await memoryActions.initializeMemories(agentMemories, activityMemories);
 
         console.log('活動資料載入成功:', activityData);

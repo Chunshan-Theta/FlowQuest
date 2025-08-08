@@ -31,7 +31,7 @@ describe('Activity Memories API', () => {
     course_package_id: '507f1f77bcf86cd799439012',
     agent_profile_id: '507f1f77bcf86cd799439013',
     status: 'online',
-    memory_ids: [
+    memories: [
       {
         _id: '507f1f77bcf86cd799439014',
         agent_id: '507f1f77bcf86cd799439013',
@@ -79,7 +79,7 @@ describe('Activity Memories API', () => {
 
     it('should return empty array when activity has no memories', async () => {
       // 準備
-      const activityWithoutMemories = { ...mockActivity, memory_ids: [] };
+      const activityWithoutMemories = { ...mockActivity, memories: [] };
       mockCollection.findOne.mockResolvedValue(activityWithoutMemories);
       const request = new NextRequest('http://localhost:3000/api/activities/507f1f77bcf86cd799439011/memories');
 

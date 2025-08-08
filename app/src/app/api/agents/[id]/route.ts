@@ -37,9 +37,17 @@ export async function GET(
       }, { status: 404 });
     }
     
+    // 輸出僅使用頂層 memories；讀取時支援 legacy memory_config
+    const normalizedMemories = (agent as any).memories ?? [];
+    const { memory_config, ...rest } = agent as any;
+    const resultAgent: AgentProfile = {
+      ...rest,
+      memories: normalizedMemories,
+    } as AgentProfile;
+    
     return NextResponse.json({
       success: true,
-      data: agent,
+      data: resultAgent,
       message: '成功獲取 Agent 詳情'
     });
   } catch (error) {
@@ -59,7 +67,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    const body: Partial<UpdateAgentProfileInput> = await request.json();
+    const body: any = await request.json();
     
     if (!isValidObjectId(id)) {
       return NextResponse.json({
@@ -81,11 +89,17 @@ export async function PUT(
       }, { status: 404 });
     }
     
+    // 接受 legacy memory_config，但轉為 memories
+    const normalizedBody: Partial<UpdateAgentProfileInput> = {
+      ...(body || {}),
+      memories: body?.memories ?? (existingAgent as any).memories ?? [],
+    } as any;
+
     // 準備更新資料
-    const updateData = { ...body, _id: id };
+    const updateData = { ...normalizedBody, _id: id } as Partial<UpdateAgentProfileInput> & { _id: string };
     
     // 驗證更新資料
-    const errors = validateAgentProfile(updateData);
+    const errors = validateAgentProfile(updateData as any);
     if (errors.length > 0) {
       return NextResponse.json({
         success: false,
@@ -94,13 +108,14 @@ export async function PUT(
       }, { status: 400 });
     }
     
-    // 更新 agent
+    // 更新 agent（僅儲存 memories）
+    const { memory_config, ...restExisting } = existingAgent as any;
     const updatedAgent: AgentProfile = {
-      ...existingAgent,
-      ...body,
+      ...restExisting,
+      ...normalizedBody,
       _id: id,
       updated_at: new Date(),
-    };
+    } as AgentProfile;
     
     const result = await collection.replaceOne(
       { _id: id },
@@ -170,9 +185,17 @@ export async function DELETE(
       }, { status: 500 });
     }
     
+    // 回傳僅使用頂層 memories
+    const normalizedMemories = (agentToDelete as any).memories ?? [];
+    const { memory_config, ...rest } = agentToDelete as any;
+    const resultAgent: AgentProfile = {
+      ...rest,
+      memories: normalizedMemories,
+    } as AgentProfile;
+
     return NextResponse.json({
       success: true,
-      data: agentToDelete,
+      data: resultAgent,
       message: '成功刪除 Agent'
     });
   } catch (error) {

@@ -32,7 +32,7 @@ describe('Activity Memory CRUD 整合測試', () => {
     course_package_id: '507f1f77bcf86cd799439012',
     agent_profile_id: '507f1f77bcf86cd799439013',
     status: 'online',
-    memory_ids: [],
+    memories: [],
     created_at: new Date(),
     updated_at: new Date(),
   };
@@ -75,7 +75,7 @@ describe('Activity Memory CRUD 整合測試', () => {
       // 2. READ - 讀取所有記憶
       const activityWithMemory = {
         ...mockActivity,
-        memory_ids: [createdMemory.data]
+        memories: [createdMemory.data]
       };
       mockCollection.findOne.mockResolvedValue(activityWithMemory);
 
@@ -170,7 +170,7 @@ describe('Activity Memory CRUD 整合測試', () => {
       // 驗證列表操作返回所有記憶
       const activityWithMemories = {
         ...mockActivity,
-        memory_ids: [
+        memories: [
           { _id: '507f1f77bcf86cd799439016', ...memory1, created_at: new Date() },
           { _id: '507f1f77bcf86cd799439017', ...memory2, created_at: new Date() }
         ]

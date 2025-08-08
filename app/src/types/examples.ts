@@ -67,6 +67,7 @@ export const EXAMPLE_COURSE_PACKAGE: CoursePackage = {
   units: [], // 將在運行時填充實際的 Unit 物件
   created_at: new Date('2024-01-01T00:00:00Z'),
   updated_at: new Date('2024-01-01T00:00:00Z'),
+  memories: [],
 };
 
 // ================================
@@ -88,6 +89,7 @@ export const EXAMPLE_UNITS: Unit[] = [
       value: ["乾", "沒擦", "穩定", "刺刺的", "保濕"]
     },
     order: 1,
+    difficulty_level: 2,
     created_at: new Date('2024-01-01T00:00:00Z'),
     updated_at: new Date('2024-01-01T00:00:00Z'),
   },
@@ -106,6 +108,7 @@ export const EXAMPLE_UNITS: Unit[] = [
       value: ["試用", "價格", "效果", "考慮", "需要"]
     },
     order: 2,
+    difficulty_level: 3,
     created_at: new Date('2024-01-01T00:00:00Z'),
     updated_at: new Date('2024-01-01T00:00:00Z'),
   },
@@ -124,6 +127,7 @@ export const EXAMPLE_UNITS: Unit[] = [
       value: ["購買", "會員", "聯絡", "服務", "滿意"]
     },
     order: 3,
+    difficulty_level: 2,
     created_at: new Date('2024-01-01T00:00:00Z'),
     updated_at: new Date('2024-01-01T00:00:00Z'),
   }
@@ -173,7 +177,7 @@ export const EXAMPLE_AGENT_PROFILE: AgentProfile = {
     background: "擁有5年保養品銷售經驗，熟悉各種肌膚類型和產品特性，善於建立客戶信任感",
     voice: "女性、約28歲、語調溫柔但充滿自信"
   },
-  memory_config: [EXAMPLE_MEMORIES[0], EXAMPLE_MEMORIES[1]], // 直接使用記憶陣列
+  memories: [EXAMPLE_MEMORIES[0], EXAMPLE_MEMORIES[1]],
   created_at: new Date('2024-01-01T00:00:00Z'),
   updated_at: new Date('2024-01-01T00:00:00Z'),
 };
@@ -188,8 +192,9 @@ export const EXAMPLE_ACTIVITY: Activity = {
   agent_profile_id: EXAMPLE_IDS.AGENT_PROFILE_1,
   current_unit_id: EXAMPLE_IDS.UNIT_1,
   status: "online",
-  memory_ids: [EXAMPLE_IDS.MEMORY_1, EXAMPLE_IDS.MEMORY_2],
-  start_time: new Date('2024-01-01T10:00:00Z'),
+  memories: [EXAMPLE_MEMORIES[0], EXAMPLE_MEMORIES[1]],
+  created_at: new Date('2024-01-01T10:00:00Z'),
+  updated_at: new Date('2024-01-01T10:00:00Z'),
 };
 
 // ================================
@@ -248,6 +253,7 @@ export const EXAMPLE_CREATE_INPUTS = {
     title: "新手化妝技巧訓練",
     description: "專為化妝新手設計的互動式學習課程",
     units: [],
+    memories: [],
   } as CreateCoursePackageInput,
 
   UNIT: {
@@ -273,7 +279,7 @@ export const EXAMPLE_CREATE_INPUTS = {
       background: "擁有多年化妝教學經驗",
       voice: "溫和耐心的指導者"
     },
-    memory_config: [], // 空的記憶陣列
+    memories: [],
   } as CreateAgentProfileInput,
 
   AGENT_MEMORY: {
@@ -290,7 +296,7 @@ export const EXAMPLE_CREATE_INPUTS = {
     agent_profile_id: EXAMPLE_IDS.AGENT_PROFILE_1,
     current_unit_id: EXAMPLE_IDS.UNIT_1,
     status: "online" as const,
-    memory_ids: [],
+    memories: [],
   } as CreateActivityInput,
 
   INTERACTION_LOG: {

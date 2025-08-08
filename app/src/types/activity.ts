@@ -17,7 +17,7 @@ export interface Activity {
   agent_profile_id: ObjectId;
   current_unit_id?: ObjectId;
   status: ActivityStatus;
-  memory_ids?: AgentMemory[];
+  memories?: AgentMemory[];
   created_at: Date;
   updated_at: Date;
 }

@@ -20,9 +20,7 @@ describe('數據驗證功能測試', () => {
           background: '專業顧問',
           voice: '溫暖'
         },
-        memory_config: {
-          memory_ids: []
-        }
+        memories: []
       };
 
       const errors = validateAgentProfile(validAgent);
@@ -37,9 +35,7 @@ describe('數據驗證功能測試', () => {
           background: '專業顧問',
           voice: '溫暖'
         },
-        memory_config: {
-          memory_ids: []
-        }
+        memories: []
       };
 
       const errors = validateAgentProfile(invalidAgent);
@@ -53,9 +49,7 @@ describe('數據驗證功能測試', () => {
           background: '專業顧問',
           voice: '溫暖'
         },
-        memory_config: {
-          memory_ids: []
-        }
+        memories: []
       };
 
       const errors = validateAgentProfile(invalidAgent);
@@ -70,9 +64,7 @@ describe('數據驗證功能測試', () => {
           background: '專業顧問',
           voice: '溫暖'
         },
-        memory_config: {
-          memory_ids: []
-        }
+        memories: []
       };
 
       const errors = validateAgentProfile(invalidAgent);
@@ -88,22 +80,20 @@ describe('數據驗證功能測試', () => {
       expect(errors).toHaveLength(0);
     });
 
-    test('應該驗證記憶配置中的記憶格式', () => {
+    test('應該驗證記憶格式', () => {
       const invalidAgent = {
         name: '測試代理人',
-        memory_config: {
-          memory_ids: [
-            {
-              _id: 'invalid-id',
-              type: 'hot' as const,
-              content: '測試記憶',
-              tags: [],
-              agent_id: '507f1f77bcf86cd799439011',
-              created_by_user_id: '507f1f77bcf86cd799439011',
-              created_at: new Date()
-            }
-          ]
-        }
+        memories: [
+          {
+            _id: 'invalid-id',
+            type: 'hot' as const,
+            content: '測試記憶',
+            tags: [],
+            agent_id: '507f1f77bcf86cd799439011',
+            created_by_user_id: '507f1f77bcf86cd799439011',
+            created_at: new Date()
+          }
+        ]
       };
 
       const errors = validateAgentProfile(invalidAgent);
@@ -176,9 +166,7 @@ describe('數據驗證功能測試', () => {
           background: '客戶服務專家',
           voice: '清晰親切'
         },
-        memory_config: {
-          memory_ids: []
-        }
+        memories: []
       };
 
       // 進行驗證
@@ -216,9 +204,7 @@ describe('數據驗證功能測試', () => {
           background: '專業',
           voice: '清晰'
         },
-        memory_config: {
-          memory_ids: []
-        }
+        memories: []
       };
 
       const errors = validateAgentProfile(validNestedData);

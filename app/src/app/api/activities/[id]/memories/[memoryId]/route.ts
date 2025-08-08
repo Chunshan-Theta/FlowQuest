@@ -33,7 +33,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json(response, { status: 404 });
     }
 
-    const memory = activity.memory_ids?.find((mem: AgentMemory) => mem._id === memoryId);
+    const memory = ((activity as any).memories || []).find((mem: AgentMemory) => mem._id === memoryId);
     
     if (!memory) {
       const response: ApiResponse<AgentMemory> = {
@@ -86,7 +86,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json(response, { status: 404 });
     }
 
-    if (!activity.memory_ids) {
+    const activityMemories: AgentMemory[] = (activity as any).memories || [];
+
+    if (!activityMemories) {
       const response: ApiResponse<AgentMemory> = {
         success: false,
         error: '活動沒有記憶資料',
@@ -94,7 +96,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json(response, { status: 404 });
     }
 
-    const memoryIndex = activity.memory_ids.findIndex((mem: AgentMemory) => mem._id === memoryId);
+    const memoryIndex = activityMemories.findIndex((mem: AgentMemory) => mem._id === memoryId);
     
     if (memoryIndex === -1) {
       const response: ApiResponse<AgentMemory> = {
@@ -106,14 +108,14 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     // 準備更新的記憶資料
     const updatedMemory = {
-      ...activity.memory_ids[memoryIndex],
+      ...activityMemories[memoryIndex],
       ...updateData,
       _id: memoryId, // 確保 ID 不變
     };
 
-    // 更新陣列中的記憶
+    // 更新陣列中的記憶（寫回 memories）
     const updateFields: any = {};
-    updateFields[`memory_ids.${memoryIndex}`] = updatedMemory;
+    updateFields[`memories.${memoryIndex}`] = updatedMemory;
     updateFields['updated_at'] = new Date();
 
     const updateResult = await activitiesCollection.updateOne(
@@ -156,11 +158,11 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     const activitiesCollection = await getActivitiesCollection();
     
-    // 從活動的 memory_ids 陣列中移除記憶
+    // 從活動的 memories 陣列中移除記憶
     const updateResult = await activitiesCollection.updateOne(
       { _id: id },
       { 
-        $pull: { memory_ids: { _id: memoryId } },
+        $pull: { memories: { _id: memoryId } },
         $set: { updated_at: new Date() }
       }
     );
