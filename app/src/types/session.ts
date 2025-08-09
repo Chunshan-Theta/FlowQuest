@@ -18,6 +18,7 @@ export interface UnitResult {
   turn_count: number;
   important_keywords: string[];
   standard_pass_rules: string[];
+  evaluation_results: string[];
   conversation_logs: ConversationLog[];
 }
 

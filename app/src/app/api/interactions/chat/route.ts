@@ -325,6 +325,7 @@ export async function POST(request: NextRequest) {
         turn_count: 1,
         important_keywords: [] as string[],
         standard_pass_rules: (unitObj?.pass_condition?.value || []) as string[],
+        evaluation_results: [],
         conversation_logs: logsAppend as any,
       });
     } else {
@@ -335,6 +336,9 @@ export async function POST(request: NextRequest) {
         ...(target.conversation_logs || []),
         ...logsAppend,
       ];
+      if (!Array.isArray((target as any).evaluation_results)) {
+        (target as any).evaluation_results = [];
+      }
     }
 
     // Pass check and unit transition (keyword or LLM)
@@ -368,6 +372,14 @@ export async function POST(request: NextRequest) {
       console.log('judgeResult:', judge.choices[0]?.message);
       console.log('isPassed:', isPassed);
       console.log('=== LLM PASS CHECK END ===');
+      // Persist judge evaluation text into evaluation_results for the current unit
+      const targetForEval = unitResults.find((u: any) => String(u.unit_id) === String(currentUnitId));
+      if (targetForEval) {
+        if (!Array.isArray((targetForEval as any).evaluation_results)) {
+          (targetForEval as any).evaluation_results = [];
+        }
+        (targetForEval as any).evaluation_results.push(result.trim());
+      }
     }
 
     if (isPassed) {

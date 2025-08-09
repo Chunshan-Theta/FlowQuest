@@ -69,6 +69,16 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
                   <span style={{ color: '#333' }}>{u.standard_pass_rules.join('；')}</span>
                 </div>
               )}
+              {Array.isArray((u as any).evaluation_results) && (u as any).evaluation_results.length > 0 && (
+                <div className="text-sm">
+                  <span className="text-gray-600" style={{ color: '#333' }}>評價結果：</span>
+                  <ul className="list-disc ml-5 mt-1 space-y-1">
+                    {(u as any).evaluation_results.map((ev: string, i: number) => (
+                      <li key={i} className="text-gray-800 whitespace-pre-wrap">{ev}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <details className="text-sm">
                 <summary className="cursor-pointer text-gray-700">對話紀錄</summary>
                 <div className="mt-2 space-y-2">

@@ -77,6 +77,7 @@ export async function PUT(request: NextRequest) {
           conversation_logs: [...(incoming.conversation_logs || [])],
           important_keywords: [...(incoming.important_keywords || [])],
           standard_pass_rules: [...(incoming.standard_pass_rules || [])],
+          evaluation_results: [...(incoming.evaluation_results || [])],
         };
         continue;
       }
@@ -100,6 +101,9 @@ export async function PUT(request: NextRequest) {
       target.important_keywords = Array.from(kwSet);
       const rulesSet = new Set([...(target.standard_pass_rules || []), ...((incoming.standard_pass_rules || []))]);
       target.standard_pass_rules = Array.from(rulesSet);
+      // Merge evaluation results (append all)
+      const evals = [...(target.evaluation_results || []), ...((incoming.evaluation_results || []))];
+      target.evaluation_results = evals;
       // Update status/turn_count from incoming if present
       if (incoming.status) target.status = incoming.status;
       if (typeof incoming.turn_count === 'number') target.turn_count = incoming.turn_count;
