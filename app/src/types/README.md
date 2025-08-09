@@ -13,7 +13,7 @@ src/types/
 ├── agent.ts              # Agent 代理人相關類型
 ├── activity.ts           # 活動實例相關類型
 ├── interaction.ts        # 互動記錄相關類型
-├── report.ts             # 報告相關類型
+// report.ts 已淘汰
 ├── constants.ts          # 常數定義（枚舉值、錯誤訊息等）
 ├── utils.ts              # 工具函數（驗證、轉換等）
 └── examples.ts           # 範例資料
@@ -81,11 +81,7 @@ import { ERROR_MESSAGES, SUCCESS_MESSAGES } from '@/types/constants';
 - `CreateInteractionLogInput` - 創建互動記錄輸入格式
 - `InteractionLogFilter` - 查詢過濾器
 
-### 報告 (`report.ts`)
-- `InteractionReport` - 互動報告
-- `UnitResult` - 關卡結果
-- `UnitResultStatus` - 關卡結果狀態
-- `CreateInteractionReportInput` - 創建報告輸入格式
+// 報告類型已淘汰
 
 ## 🛠️ 工具函數 (`utils.ts`)
 
@@ -139,7 +135,7 @@ import { ERROR_MESSAGES, SUCCESS_MESSAGES } from '@/types/constants';
 - 範例記憶：客戶偏好和行為記錄
 - 範例活動：完整的學習流程
 - 範例互動記錄：真實對話範例
-- 範例報告：學習成果分析
+// 範例報告已移除
 
 ## 🚀 擴充指南
 

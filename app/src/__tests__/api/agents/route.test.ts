@@ -35,10 +35,7 @@ const MOCK_CREATE_INPUT: CreateAgentProfileInput = {
     background: '資深銷售顧問',
     voice: '溫暖親切的聲音'
   },
-  memory_config: {
-    memory_ids: [],
-    cold_memory_ids: []
-  }
+  memories: []
 };
 
 const MOCK_AGENTS: AgentProfile[] = [
@@ -50,10 +47,7 @@ const MOCK_AGENTS: AgentProfile[] = [
       background: '客服專員',
       voice: '清晰'
     },
-    memory_config: {
-      memory_ids: [],
-      cold_memory_ids: []
-    },
+    memories: [],
     created_at: new Date('2024-01-01T00:00:00Z'),
     updated_at: new Date('2024-01-01T00:00:00Z'),
   },
@@ -65,10 +59,7 @@ const MOCK_AGENTS: AgentProfile[] = [
       background: '銷售顧問',
       voice: '溫暖'
     },
-    memory_config: {
-      memory_ids: [],
-      cold_memory_ids: []
-    },
+    memories: [],
     created_at: new Date('2024-01-02T00:00:00Z'),
     updated_at: new Date('2024-01-02T00:00:00Z'),
   }
@@ -84,10 +75,7 @@ const MOCK_AGENTS_RESPONSE = [
       background: '客服專員',
       voice: '清晰'
     },
-    memory_config: {
-      memory_ids: [],
-      cold_memory_ids: []
-    },
+    memories: [],
     created_at: '2024-01-01T00:00:00.000Z',
     updated_at: '2024-01-01T00:00:00.000Z',
   },
@@ -99,10 +87,7 @@ const MOCK_AGENTS_RESPONSE = [
       background: '銷售顧問',
       voice: '溫暖'
     },
-    memory_config: {
-      memory_ids: [],
-      cold_memory_ids: []
-    },
+    memories: [],
     created_at: '2024-01-02T00:00:00.000Z',
     updated_at: '2024-01-02T00:00:00.000Z',
   }
@@ -210,7 +195,7 @@ describe('Agents Collection API Tests', () => {
         _id: expect.any(String),
         name: MOCK_CREATE_INPUT.name,
         persona: MOCK_CREATE_INPUT.persona,
-        memory_config: MOCK_CREATE_INPUT.memory_config,
+        memories: [],
         created_at: expect.any(String),
         updated_at: expect.any(String)
       });
@@ -222,7 +207,7 @@ describe('Agents Collection API Tests', () => {
           _id: expect.any(String),
           name: MOCK_CREATE_INPUT.name,
           persona: MOCK_CREATE_INPUT.persona,
-          memory_config: MOCK_CREATE_INPUT.memory_config,
+          memories: [],
           created_at: expect.any(Date),
           updated_at: expect.any(Date)
         })
@@ -312,9 +297,8 @@ describe('Agents Collection API Tests', () => {
         expect(agent.persona).toHaveProperty('tone');
         expect(agent.persona).toHaveProperty('background');
         expect(agent.persona).toHaveProperty('voice');
-        expect(agent).toHaveProperty('memory_config');
-        expect(agent.memory_config).toHaveProperty('memory_ids');
-        expect(agent.memory_config).toHaveProperty('cold_memory_ids');
+        expect(agent).toHaveProperty('memories');
+        expect(Array.isArray(agent.memories)).toBe(true);
         expect(agent).toHaveProperty('created_at');
         expect(agent).toHaveProperty('updated_at');
         // 驗證時間戳格式
@@ -335,10 +319,7 @@ describe('Agents Collection API Tests', () => {
           background: '多領域專家，具有豐富的客戶服務經驗',
           voice: '中性且清晰，帶有親和力的語調'
         },
-        memory_config: {
-          memory_ids: [],
-          cold_memory_ids: []
-        }
+        memories: []
       };
 
       const request = new NextRequest('http://localhost:3000/api/agents', {
@@ -361,10 +342,7 @@ describe('Agents Collection API Tests', () => {
           background: complexInput.persona.background,
           voice: complexInput.persona.voice
         },
-        memory_config: {
-          memory_ids: complexInput.memory_config.memory_ids,
-          cold_memory_ids: complexInput.memory_config.cold_memory_ids
-        },
+        memories: [],
         created_at: expect.any(String),
         updated_at: expect.any(String)
       });

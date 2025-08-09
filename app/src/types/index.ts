@@ -13,7 +13,7 @@ export * from './agent';
 export * from './memory';
 export * from './activity';
 export * from './interaction';
-export * from './report';
+export * from './session';
 export * from './chat';
 
 // 工具函數和常數

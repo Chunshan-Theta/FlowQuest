@@ -12,6 +12,8 @@ export type MemoryType = "hot" | "cold";
 export interface AgentMemory {
   _id: ObjectId;
   agent_id: ObjectId;
+  activity_id?: ObjectId;
+  session_id?: string;
   type: MemoryType;
   content: string;
   tags: string[];

@@ -38,10 +38,7 @@
    - `InteractionLog`
    - 相關輸入格式和過濾器
 
-7. **`report.ts`** - 報告相關類型
-   - `InteractionReport`
-   - `UnitResult`
-   - `UnitResultStatus`
+7. 已淘汰：`report.ts`（報告相關類型已移除）
 
 ### ✅ 支援檔案完整
 - **`constants.ts`** - 所有常數定義
@@ -69,7 +66,7 @@ src/types/
 ├── agent.ts           (1.4KB) - Agent 類型
 ├── activity.ts        (0.8KB) - 活動類型
 ├── interaction.ts     (0.6KB) - 互動類型
-├── report.ts          (0.6KB) - 報告類型
+// report.ts 已移除
 ├── constants.ts       (5.1KB) - 常數定義
 ├── utils.ts           (8.9KB) - 工具函數
 └── examples.ts        (8.2KB) - 範例資料

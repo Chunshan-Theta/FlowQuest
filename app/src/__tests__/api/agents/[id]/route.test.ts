@@ -31,10 +31,7 @@ const MOCK_AGENT: AgentProfile = {
     background: '專業銷售顧問',
     voice: '溫暖的女性聲音'
   },
-  memory_config: {
-    memory_ids: [],
-    cold_memory_ids: []
-  },
+  memories: [],
   created_at: new Date('2024-01-01T00:00:00Z'),
   updated_at: new Date('2024-01-01T00:00:00Z'),
 };
@@ -48,10 +45,7 @@ const MOCK_AGENT_RESPONSE = {
     background: '專業銷售顧問',
     voice: '溫暖的女性聲音'
   },
-  memory_config: {
-    memory_ids: [],
-    cold_memory_ids: []
-  },
+  memories: [],
   created_at: '2024-01-01T00:00:00.000Z',
   updated_at: '2024-01-01T00:00:00.000Z',
 };
@@ -199,8 +193,7 @@ describe('Agent API CRUD Tests', () => {
           voice: '中性且清晰的聲音'
         },
         memory_config: {
-          memory_ids: [],
-          cold_memory_ids: []
+          memory_ids: []
         }
       };
 
@@ -225,7 +218,7 @@ describe('Agent API CRUD Tests', () => {
         _id: VALID_OBJECT_ID,
         name: complexUpdateData.name,
         persona: complexUpdateData.persona,
-        memory_config: complexUpdateData.memory_config,
+        memories: [],
         created_at: '2024-01-01T00:00:00.000Z',
         updated_at: expect.any(String)
       });
@@ -298,9 +291,8 @@ describe('Agent API CRUD Tests', () => {
       expect(data.data.persona).toHaveProperty('tone');
       expect(data.data.persona).toHaveProperty('background');
       expect(data.data.persona).toHaveProperty('voice');
-      expect(data.data).toHaveProperty('memory_config');
-      expect(data.data.memory_config).toHaveProperty('memory_ids');
-      expect(data.data.memory_config).toHaveProperty('cold_memory_ids');
+      expect(data.data).toHaveProperty('memories');
+      expect(Array.isArray(data.data.memories)).toBe(true);
       expect(data.data).toHaveProperty('created_at');
       expect(data.data).toHaveProperty('updated_at');
     });
@@ -324,10 +316,10 @@ describe('Agent API CRUD Tests', () => {
 
       // 驗證只更新了提供的欄位，其他欄位保持不變
       expect(data.data.name).toBe(partialUpdate.name);
-      expect(data.data.persona).toEqual(MOCK_AGENT.persona); // 應該保持原有的 persona
-      expect(data.data.memory_config).toEqual(MOCK_AGENT.memory_config); // 應該保持原有的 memory_config
-      expect(data.data.created_at).toBe('2024-01-01T00:00:00.000Z'); // 創建時間不變
-      expect(data.data.updated_at).not.toBe('2024-01-01T00:00:00.000Z'); // 更新時間應該改變
+      expect(data.data.persona).toEqual(MOCK_AGENT.persona);
+      expect(Array.isArray(data.data.memories)).toBe(true);
+      expect(data.data.created_at).toBe('2024-01-01T00:00:00.000Z');
+      expect(data.data.updated_at).not.toBe('2024-01-01T00:00:00.000Z');
     });
 
     test('DELETE 操作應該返回被刪除的完整 agent 資料', async () => {

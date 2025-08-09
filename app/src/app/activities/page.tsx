@@ -2,10 +2,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Activity, CreateActivityInput, ApiResponse, AgentProfile, CoursePackage, ObjectId } from '@/types';
+import { Activity, CreateActivityInput, ApiResponse, AgentProfile, CoursePackage, ObjectId, AgentMemory } from '@/types';
 import { useActivities } from '@/hooks/useActivities';
 import { useAgents } from '@/hooks/useAgents';
 import { useCoursePackages } from '@/hooks/useCoursePackages';
+import { MemoryForm } from '@/components/MemoryForm';
 
 interface ActivityFormProps {
   activity?: Activity;
@@ -17,13 +18,14 @@ interface ActivityFormProps {
 function ActivityForm({ activity, onSubmit, onCancel, isSubmitting = false }: ActivityFormProps) {
   const { agents, fetchAgents } = useAgents();
   const { coursePackages, fetchCoursePackages } = useCoursePackages();
+  const [showMemoryForm, setShowMemoryForm] = useState(false);
   
   const [formData, setFormData] = useState<CreateActivityInput>({
     name: activity?.name || '',
     course_package_id: activity?.course_package_id || '',
     agent_profile_id: activity?.agent_profile_id || '',
     status: activity?.status || 'online',
-    memory_ids: activity?.memory_ids || [],
+    memories: activity?.memories || [],
   });
 
   useEffect(() => {
@@ -40,100 +42,198 @@ function ActivityForm({ activity, onSubmit, onCancel, isSubmitting = false }: Ac
     onSubmit(formData);
   };
 
+  const handleMemoryChange = (memory: AgentMemory, checked: boolean) => {
+    setFormData(prev => ({
+      ...prev,
+      memories: checked 
+        ? [...(prev.memories || []), memory]
+        : (prev.memories || []).filter((m: AgentMemory) => m._id !== memory._id)
+    }));
+  };
+
+  const handleAddMemory = (memory: AgentMemory) => {
+    const newMemory: AgentMemory = {
+      ...memory,
+      _id: `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      agent_id: formData.agent_profile_id || '',
+      created_by_user_id: 'temp_user_id',
+    };
+    
+    setFormData(prev => ({
+      ...prev,
+      memories: [...(prev.memories || []), newMemory]
+    }));
+    setShowMemoryForm(false);
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
-      <h2 className="text-xl font-semibold mb-4 text-gray-800">
-        {activity ? '編輯活動' : '新增活動'}
-      </h2>
-      
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {/* 活動名稱 */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            活動名稱 *
-          </label>
-          <input
-            type="text"
-            value={formData.name}
-            onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-            placeholder="請輸入活動名稱"
-            required
-          />
-        </div>
+      {showMemoryForm ? (
+        <MemoryForm
+          onSubmit={handleAddMemory}
+          onCancel={() => setShowMemoryForm(false)}
+          isSubmitting={isSubmitting}
+        />
+      ) : (
+        <>
+          <h2 className="text-xl font-semibold mb-4 text-gray-800">
+            {activity ? '編輯活動' : '新增活動'}
+          </h2>
+          
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* 活動名稱 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                活動名稱 *
+              </label>
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                placeholder="請輸入活動名稱"
+                required
+              />
+            </div>
 
-        {/* Agent 選擇 */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            選擇 Agent *
-          </label>
-          <select
-            value={formData.agent_profile_id}
-            onChange={(e) => setFormData(prev => ({ ...prev, agent_profile_id: e.target.value }))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-            required
-          >
-            <option value="">請選擇一個 Agent</option>
-            {agents.map((agent) => (
-              <option key={agent._id} value={agent._id}>
-                {agent.name} - {agent.persona.tone}
-              </option>
-            ))}
-          </select>
-        </div>
+            {/* Agent 選擇 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                選擇 Agent *
+              </label>
+              <select
+                value={formData.agent_profile_id}
+                onChange={(e) => setFormData(prev => ({ ...prev, agent_profile_id: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                required
+              >
+                <option value="">請選擇一個 Agent</option>
+                {agents.map((agent) => (
+                  <option key={agent._id} value={agent._id}>
+                    {agent.name} - {agent.persona.tone}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-        {/* 課程包選擇 */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            選擇課程包 *
-          </label>
-          <select
-            value={formData.course_package_id}
-            onChange={(e) => setFormData(prev => ({ ...prev, course_package_id: e.target.value }))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-            required
-          >
-            <option value="">請選擇一個課程包</option>
-            {coursePackages.map((coursePackage) => (
-              <option key={coursePackage._id} value={coursePackage._id}>
-                {coursePackage.title}
-              </option>
-            ))}
-          </select>
-        </div>
+            {/* 課程包選擇 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                選擇課程包 *
+              </label>
+              <select
+                value={formData.course_package_id}
+                onChange={(e) => setFormData(prev => ({ ...prev, course_package_id: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                required
+              >
+                <option value="">請選擇一個課程包</option>
+                {coursePackages.map((coursePackage) => (
+                  <option key={coursePackage._id} value={coursePackage._id}>
+                    {coursePackage.title}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-        {/* 活動狀態 */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            活動狀態
-          </label>
-          <select
-            value={formData.status}
-            onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value as 'online' | 'offline' }))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
-          >
-            <option value="online">上架中</option>
-            <option value="offline">下架中</option>
-          </select>
-        </div>
+            {/* 活動狀態 */}
+            <div>
+              <label className="block textsm font-medium text-gray-700 mb-1">
+                活動狀態
+              </label>
+              <select
+                value={formData.status}
+                onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value as 'online' | 'offline' }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+              >
+                <option value="online">上架中</option>
+                <option value="offline">下架中</option>
+              </select>
+            </div>
 
-        <div className="flex gap-3 pt-4">
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isSubmitting ? '處理中...' : (activity ? '更新' : '創建')}
-          </button>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
-          >
-            取消
-          </button>
-        </div>
-      </form>
+            {/* 記憶管理 */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-medium text-gray-800">記憶設定</h3>
+                <button
+                  type="button"
+                  onClick={() => setShowMemoryForm(true)}
+                  className="px-3 py-1 bg-green-600 text-white text-sm rounded-md hover:bg-green-700"
+                >
+                  ➕ 新增記憶
+                </button>
+              </div>
+              
+              <div className="grid md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    熱記憶 (Hot Memories)
+                  </label>
+                  <div className="space-y-2 max-h-40 overflow-y-auto border border-gray-200 rounded-md p-3">
+                    {(formData.memories || []).filter((m: AgentMemory) => m.type === 'hot').map((memory: AgentMemory) => (
+                      <div key={memory._id} className="flex items-center justify-between p-2 bg-red-50 rounded">
+                        <span className="text-sm text-gray-700 flex-1">{memory.content}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleMemoryChange(memory, false)}
+                          className="text-red-600 hover:text-red-800 ml-2"
+                          title="移除記憶"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                    {(formData.memories || []).filter((m: AgentMemory) => m.type === 'hot').length === 0 && (
+                      <p className="text-sm text-gray-500">暫無熱記憶</p>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    冷記憶 (Cold Memories)
+                  </label>
+                  <div className="space-y-2 max-h-40 overflow-y-auto border border-gray-200 rounded-md p-3">
+                    {(formData.memories || []).filter((m: AgentMemory) => m.type === 'cold').map((memory: AgentMemory) => (
+                      <div key={memory._id} className="flex items-center justify-between p-2 bg-blue-50 rounded">
+                        <span className="text-sm text-gray-700 flex-1">{memory.content}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleMemoryChange(memory, false)}
+                          className="text-red-600 hover:text-red-800 ml-2"
+                          title="移除記憶"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                    {(formData.memories || []).filter((m: AgentMemory) => m.type === 'cold').length === 0 && (
+                      <p className="text-sm text-gray-500">暫無冷記憶</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-4">
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSubmitting ? '處理中...' : (activity ? '更新' : '創建')}
+              </button>
+              <button
+                type="button"
+                onClick={onCancel}
+                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+              >
+                取消
+              </button>
+            </div>
+          </form>
+        </>
+      )}
     </div>
   );
 }
@@ -150,12 +250,10 @@ export default function ActivitiesPage() {
     fetchActivities();
   }, [fetchActivities]);
 
-  // 點擊活動卡片查看詳情
   const handleActivityClick = (activityId: string) => {
     router.push(`/activities/${activityId}`);
   };
 
-  // 創建或更新活動
   const handleSubmit = async (data: CreateActivityInput) => {
     try {
       setIsSubmitting(true);
@@ -175,7 +273,6 @@ export default function ActivitiesPage() {
     }
   };
 
-  // 刪除活動
   const handleDelete = async (id: string) => {
     if (!confirm('確定要刪除這個活動嗎？')) return;
     
@@ -186,7 +283,6 @@ export default function ActivitiesPage() {
     }
   };
 
-  // 過濾活動
   const filteredActivities = activities.filter(activity => {
     if (statusFilter && activity.status !== statusFilter) return false;
     return true;
@@ -276,7 +372,6 @@ export default function ActivitiesPage() {
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {filteredActivities.map((activity) => (
                 <div key={activity._id} className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-200">
-                  {/* 可點擊的卡片內容區域 */}
                   <div 
                     className="p-6 cursor-pointer"
                     onClick={() => handleActivityClick(activity._id)}
@@ -301,22 +396,31 @@ export default function ActivitiesPage() {
                         <span className="font-medium text-gray-600">課程包 ID：</span>
                         <span className="text-gray-800">{activity.course_package_id}</span>
                       </div>
+                      {activity.memories && (
+                        <>
+                          <div>
+                            <span className="font-medium text-gray-600">熱記憶：</span>
+                            <span className="text-gray-800">{(activity.memories || []).filter((m: AgentMemory) => m.type === 'hot').length} 個</span>
+                          </div>
+                          <div>
+                            <span className="font-medium text-gray-600">冷記憶：</span>
+                            <span className="text-gray-800">{(activity.memories || []).filter((m: AgentMemory) => m.type === 'cold').length} 個</span>
+                          </div>
+                        </>
+                      )}
                     </div>
 
                     <div className="mt-4 pt-4 border-t border-gray-200 text-xs text-gray-500">
-                      <div>開始：{new Date(activity.start_time).toLocaleString('zh-TW')}</div>
-                      {activity.end_time && (
-                        <div>結束：{new Date(activity.end_time).toLocaleString('zh-TW')}</div>
-                      )}
+                      <div>創建：{new Date(activity.created_at).toLocaleDateString('zh-TW')}</div>
+                      <div>更新：{new Date(activity.updated_at).toLocaleDateString('zh-TW')}</div>
                     </div>
                   </div>
 
-                  {/* 操作按鈕區域 - 不在可點擊區域內 */}
                   <div className="px-6 pb-4">
                     <div className="flex gap-2 justify-end">
                       <button
                         onClick={(e) => {
-                          e.stopPropagation(); // 防止觸發卡片點擊
+                          e.stopPropagation();
                           setEditingActivity(activity);
                           setShowForm(true);
                         }}
@@ -327,7 +431,7 @@ export default function ActivitiesPage() {
                       </button>
                       <button
                         onClick={(e) => {
-                          e.stopPropagation(); // 防止觸發卡片點擊
+                          e.stopPropagation();
                           handleDelete(activity._id);
                         }}
                         className="text-red-600 hover:text-red-800 p-1"

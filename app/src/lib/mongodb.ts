@@ -1,5 +1,5 @@
 import { MongoClient, Db, Collection } from 'mongodb';
-import { AgentProfile, Unit, CoursePackage, Activity } from '@/types';
+import { AgentProfile, Unit, CoursePackage, Activity, SessionRecord } from '@/types';
 
 let client: MongoClient;
 let clientPromise: Promise<MongoClient>;
@@ -71,6 +71,12 @@ export async function getCoursePackagesCollection(): Promise<Collection<CoursePa
 export async function getActivitiesCollection(): Promise<Collection<Activity>> {
   const db = await getDatabase();
   return db.collection<Activity>('activities');
+}
+
+// 獲取 sessions 集合
+export async function getSessionsCollection(): Promise<Collection<SessionRecord>> {
+  const db = await getDatabase();
+  return db.collection<SessionRecord>('sessions');
 }
 
 // 測試資料庫連接

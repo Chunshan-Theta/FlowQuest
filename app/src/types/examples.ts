@@ -33,9 +33,8 @@ import {
   CreateInteractionLogInput,
 } from './interaction';
 
-import {
-  InteractionReport,
-} from './report';
+// 移除 report 相關 import 與使用
+// report 類型已淘汰
 
 import { generateObjectId } from './utils';
 
@@ -54,7 +53,7 @@ const EXAMPLE_IDS = {
   USER_1: generateObjectId(),
   ACTIVITY_1: generateObjectId(),
   INTERACTION_1: generateObjectId(),
-  REPORT_1: generateObjectId(),
+  // REPORT_1 已淘汰
 } as const;
 
 // ================================
@@ -67,6 +66,7 @@ export const EXAMPLE_COURSE_PACKAGE: CoursePackage = {
   units: [], // 將在運行時填充實際的 Unit 物件
   created_at: new Date('2024-01-01T00:00:00Z'),
   updated_at: new Date('2024-01-01T00:00:00Z'),
+  memories: [],
 };
 
 // ================================
@@ -88,6 +88,7 @@ export const EXAMPLE_UNITS: Unit[] = [
       value: ["乾", "沒擦", "穩定", "刺刺的", "保濕"]
     },
     order: 1,
+    difficulty_level: 2,
     created_at: new Date('2024-01-01T00:00:00Z'),
     updated_at: new Date('2024-01-01T00:00:00Z'),
   },
@@ -106,6 +107,7 @@ export const EXAMPLE_UNITS: Unit[] = [
       value: ["試用", "價格", "效果", "考慮", "需要"]
     },
     order: 2,
+    difficulty_level: 3,
     created_at: new Date('2024-01-01T00:00:00Z'),
     updated_at: new Date('2024-01-01T00:00:00Z'),
   },
@@ -124,6 +126,7 @@ export const EXAMPLE_UNITS: Unit[] = [
       value: ["購買", "會員", "聯絡", "服務", "滿意"]
     },
     order: 3,
+    difficulty_level: 2,
     created_at: new Date('2024-01-01T00:00:00Z'),
     updated_at: new Date('2024-01-01T00:00:00Z'),
   }
@@ -173,7 +176,7 @@ export const EXAMPLE_AGENT_PROFILE: AgentProfile = {
     background: "擁有5年保養品銷售經驗，熟悉各種肌膚類型和產品特性，善於建立客戶信任感",
     voice: "女性、約28歲、語調溫柔但充滿自信"
   },
-  memory_config: [EXAMPLE_MEMORIES[0], EXAMPLE_MEMORIES[1]], // 直接使用記憶陣列
+  memories: [EXAMPLE_MEMORIES[0], EXAMPLE_MEMORIES[1]],
   created_at: new Date('2024-01-01T00:00:00Z'),
   updated_at: new Date('2024-01-01T00:00:00Z'),
 };
@@ -188,8 +191,9 @@ export const EXAMPLE_ACTIVITY: Activity = {
   agent_profile_id: EXAMPLE_IDS.AGENT_PROFILE_1,
   current_unit_id: EXAMPLE_IDS.UNIT_1,
   status: "online",
-  memory_ids: [EXAMPLE_IDS.MEMORY_1, EXAMPLE_IDS.MEMORY_2],
-  start_time: new Date('2024-01-01T10:00:00Z'),
+  memories: [EXAMPLE_MEMORIES[0], EXAMPLE_MEMORIES[1]],
+  created_at: new Date('2024-01-01T10:00:00Z'),
+  updated_at: new Date('2024-01-01T10:00:00Z'),
 };
 
 // ================================
@@ -209,36 +213,7 @@ export const EXAMPLE_INTERACTION_LOGS: InteractionLog[] = [
   }
 ];
 
-// ================================
-// 範例報告
-// ================================
-export const EXAMPLE_INTERACTION_REPORT: InteractionReport = {
-  _id: EXAMPLE_IDS.REPORT_1,
-  activity_id: EXAMPLE_IDS.ACTIVITY_1,
-  user_id: EXAMPLE_IDS.USER_1,
-  summary: "該使用者在與保養諮詢agent互動過程中，展現出對產品品質的重視以及價格敏感度。透過三個關卡的對話，成功建立信任關係並完成產品推薦。使用者主要關注保濕需求，對試用體驗表示興趣。",
-  unit_results: [
-    {
-      unit_id: EXAMPLE_IDS.UNIT_1,
-      status: "passed",
-      turn_count: 3,
-      important_keywords: ["忙", "保養", "乾"]
-    },
-    {
-      unit_id: EXAMPLE_IDS.UNIT_2,
-      status: "passed",
-      turn_count: 5,
-      important_keywords: ["保濕", "試用", "價格"]
-    },
-    {
-      unit_id: EXAMPLE_IDS.UNIT_3,
-      status: "passed",
-      turn_count: 4,
-      important_keywords: ["會員", "服務", "滿意"]
-    }
-  ],
-  generated_at: new Date('2024-01-01T11:00:00Z'),
-};
+// 報告範例已移除
 
 // ================================
 // 創建資料的範例輸入
@@ -248,6 +223,7 @@ export const EXAMPLE_CREATE_INPUTS = {
     title: "新手化妝技巧訓練",
     description: "專為化妝新手設計的互動式學習課程",
     units: [],
+    memories: [],
   } as CreateCoursePackageInput,
 
   UNIT: {
@@ -273,7 +249,7 @@ export const EXAMPLE_CREATE_INPUTS = {
       background: "擁有多年化妝教學經驗",
       voice: "溫和耐心的指導者"
     },
-    memory_config: [], // 空的記憶陣列
+    memories: [],
   } as CreateAgentProfileInput,
 
   AGENT_MEMORY: {
@@ -290,7 +266,7 @@ export const EXAMPLE_CREATE_INPUTS = {
     agent_profile_id: EXAMPLE_IDS.AGENT_PROFILE_1,
     current_unit_id: EXAMPLE_IDS.UNIT_1,
     status: "online" as const,
-    memory_ids: [],
+    memories: [],
   } as CreateActivityInput,
 
   INTERACTION_LOG: {
@@ -323,6 +299,5 @@ export const EXAMPLES = {
   MEMORIES: EXAMPLE_MEMORIES,
   ACTIVITY: EXAMPLE_ACTIVITY,
   INTERACTION_LOGS: EXAMPLE_INTERACTION_LOGS,
-  INTERACTION_REPORT: EXAMPLE_INTERACTION_REPORT,
   CREATE_INPUTS: EXAMPLE_CREATE_INPUTS,
 } as const;

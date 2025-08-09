@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { SimpleChatRequest, SimpleChatResponse } from '@/types';
+import { getOpenAIClient } from '@/lib/openai';
 
 // 懶加載 OpenAI 客戶端，只在需要時初始化
-function getOpenAIClient() {
+function ensureOpenAI() {
   if (!process.env.OPENAI_API_KEY) {
     throw new Error('OPENAI_API_KEY environment variable is required');
   }
-  return new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
 }
 
 export async function POST(request: NextRequest) {
@@ -38,7 +36,7 @@ export async function POST(request: NextRequest) {
     // 呼叫 OpenAI API
     const openai = getOpenAIClient();
     const completion = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
+      model: 'gpt-4o',
       messages: messages,
       max_tokens: max_tokens,
       temperature: temperature,

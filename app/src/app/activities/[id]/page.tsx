@@ -2,23 +2,27 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Activity, AgentProfile, CoursePackage } from '@/types';
+import { Activity, AgentProfile, CoursePackage, AgentMemory, CreateAgentMemoryInput } from '@/types';
 import { useActivities } from '@/hooks/useActivities';
 import { useAgents } from '@/hooks/useAgents';
 import { useCoursePackages } from '@/hooks/useCoursePackages';
+import { MemoryForm } from '@/components/MemoryForm';
 
 export default function ActivityDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { fetchActivity } = useActivities();
+  const { fetchActivity, fetchActivityMemories, createActivityMemory, updateActivityMemory, deleteActivityMemory } = useActivities();
   const { fetchAgent } = useAgents();
   const { fetchCoursePackage } = useCoursePackages();
   
   const [activity, setActivity] = useState<Activity | null>(null);
   const [agent, setAgent] = useState<AgentProfile | null>(null);
   const [coursePackage, setCoursePackage] = useState<CoursePackage | null>(null);
+  const [memories, setMemories] = useState<AgentMemory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showMemoryForm, setShowMemoryForm] = useState(false);
+  const [editingMemory, setEditingMemory] = useState<AgentMemory | null>(null);
 
   useEffect(() => {
     const loadActivityDetails = async () => {
@@ -41,6 +45,15 @@ export default function ActivityDetailPage() {
         setAgent(agentData);
         setCoursePackage(coursePackageData);
         
+        // 載入活動記憶
+        try {
+          const memoriesData = await fetchActivityMemories(activityId);
+          setMemories(memoriesData);
+        } catch (err) {
+          console.warn('載入記憶失敗:', err);
+          setMemories([]);
+        }
+        
       } catch (err) {
         setError(err instanceof Error ? err.message : '載入活動詳情失敗');
       } finally {
@@ -51,7 +64,7 @@ export default function ActivityDetailPage() {
     if (params.id) {
       loadActivityDetails();
     }
-  }, [params.id, fetchActivity, fetchAgent, fetchCoursePackage]);
+  }, [params.id, fetchActivity, fetchAgent, fetchCoursePackage, fetchActivityMemories]);
 
   const getStatusText = (status: string) => {
     switch (status) {
@@ -231,16 +244,145 @@ export default function ActivityDetailPage() {
           </div>
         </div>
 
-        {/* 記憶配置 */}
-        {(activity.memories?.length ?? 0) > 0 && (
-          <div className="bg-white rounded-lg shadow-md p-6 mt-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4">🧠 記憶配置</h2>
-            <div className="text-sm">
-              <span className="font-medium text-gray-600">熱記憶數量：</span>
-              <span className="text-gray-800">{activity.memories?.length ?? 0} 個</span>
-            </div>
+                {/* 記憶配置 */}
+        <div className="bg-white rounded-lg shadow-md p-6 mt-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold text-gray-800">🧠 活動記憶配置</h2>
+            <button
+              onClick={() => setShowMemoryForm(true)}
+              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm"
+            >
+              ➕ 新增記憶
+            </button>
           </div>
-        )}
+          
+          {memories.length > 0 ? (
+            <div className="space-y-4">
+              <div className="text-sm mb-4">
+                <span className="font-medium text-gray-600">總記憶數量：</span>
+                <span className="text-gray-800">{memories.length} 個</span>
+              </div>
+              
+              <div className="grid md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    熱記憶 (Hot Memories)
+                  </label>
+                  <div className="space-y-2 max-h-60 overflow-y-auto border border-gray-200 rounded-md p-3">
+                    {memories.filter(m => m.type === 'hot').map((memory) => (
+                      <div key={memory._id} className="flex items-center justify-between p-2 bg-red-50 rounded">
+                        <div className="flex-1">
+                          <div className="text-sm text-gray-700 mb-1">{memory.content}</div>
+                          {memory.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {memory.tags.map((tag, index) => (
+                                <span key={index} className="px-1 py-0.5 bg-red-100 text-red-700 text-xs rounded">
+                                  #{tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          <div className="text-xs text-gray-500 mt-1">
+                            {new Date(memory.created_at).toLocaleDateString()}
+                          </div>
+                        </div>
+                        <div className="flex space-x-1 ml-2">
+                          <button
+                            onClick={() => setEditingMemory(memory)}
+                            className="text-blue-600 hover:text-blue-800 text-sm"
+                            title="編輯"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (confirm('確定要刪除此記憶嗎？')) {
+                                try {
+                                  await deleteActivityMemory(activity!._id, memory._id);
+                                  setMemories(prev => prev.filter(m => m._id !== memory._id));
+                                } catch (err) {
+                                  console.error('刪除記憶失敗:', err);
+                                  alert('刪除記憶失敗: ' + (err instanceof Error ? err.message : '未知錯誤'));
+                                }
+                              }
+                            }}
+                            className="text-red-600 hover:text-red-800 text-sm"
+                            title="刪除"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {memories.filter(m => m.type === 'hot').length === 0 && (
+                      <p className="text-sm text-gray-500">暫無熱記憶</p>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    冷記憶 (Cold Memories)
+                  </label>
+                  <div className="space-y-2 max-h-60 overflow-y-auto border border-gray-200 rounded-md p-3">
+                    {memories.filter(m => m.type === 'cold').map((memory) => (
+                      <div key={memory._id} className="flex items-center justify-between p-2 bg-blue-50 rounded">
+                        <div className="flex-1">
+                          <div className="text-sm text-gray-700 mb-1">{memory.content}</div>
+                          {memory.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {memory.tags.map((tag, index) => (
+                                <span key={index} className="px-1 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">
+                                  #{tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          <div className="text-xs text-gray-500 mt-1">
+                            {new Date(memory.created_at).toLocaleDateString()}
+                          </div>
+                        </div>
+                        <div className="flex space-x-1 ml-2">
+                          <button
+                            onClick={() => setEditingMemory(memory)}
+                            className="text-blue-600 hover:text-blue-800 text-sm"
+                            title="編輯"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (confirm('確定要刪除此記憶嗎？')) {
+                                try {
+                                  await deleteActivityMemory(activity!._id, memory._id);
+                                  setMemories(prev => prev.filter(m => m._id !== memory._id));
+                                } catch (err) {
+                                  console.error('刪除記憶失敗:', err);
+                                  alert('刪除記憶失敗: ' + (err instanceof Error ? err.message : '未知錯誤'));
+                                }
+                              }
+                            }}
+                            className="text-red-600 hover:text-red-800 text-sm"
+                            title="刪除"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {memories.filter(m => m.type === 'cold').length === 0 && (
+                      <p className="text-sm text-gray-500">暫無冷記憶</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-gray-500 text-center py-8">
+              暫無記憶資料，點擊「新增記憶」開始添加
+            </div>
+          )}
+        </div>
 
         {/* 操作按鈕 */}
         <div className="flex gap-4 mt-6">
@@ -264,6 +406,114 @@ export default function ActivityDetailPage() {
           </button>
         </div>
       </div>
+
+      {/* 新增記憶表單 Modal */}
+      {showMemoryForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="w-full max-w-md mx-4">
+            <MemoryForm
+              onSubmit={async (memory) => {
+                if (!activity) return;
+                
+                try {
+                  const memoryData: CreateAgentMemoryInput = {
+                    agent_id: activity.agent_profile_id,
+                    type: memory.type,
+                    content: memory.content,
+                    tags: memory.tags,
+                    created_by_user_id: '507f1f77bcf86cd799439011', // 假設的用戶 ID，實際應從認證系統獲取
+                  };
+
+                  const newMemory = await createActivityMemory(activity._id, memoryData);
+                  setMemories(prev => [...prev, newMemory]);
+                  setShowMemoryForm(false);
+                } catch (err) {
+                  console.error('創建記憶失敗:', err);
+                  alert('創建記憶失敗: ' + (err instanceof Error ? err.message : '未知錯誤'));
+                }
+              }}
+              onCancel={() => setShowMemoryForm(false)}
+              isSubmitting={false}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* 編輯記憶表單 Modal */}
+      {editingMemory && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">編輯記憶</h3>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              const formData = new FormData(e.currentTarget);
+              const updateData = {
+                type: formData.get('type') as 'hot' | 'cold',
+                content: formData.get('content') as string,
+                tags: (formData.get('tags') as string || '').split(',').map(tag => tag.trim()).filter(Boolean),
+              };
+
+              try {
+                const updatedMemory = await updateActivityMemory(activity!._id, editingMemory._id, updateData);
+                setMemories(prev => prev.map(m => m._id === editingMemory._id ? updatedMemory : m));
+                setEditingMemory(null);
+              } catch (err) {
+                console.error('更新記憶失敗:', err);
+                alert('更新記憶失敗: ' + (err instanceof Error ? err.message : '未知錯誤'));
+              }
+            }}>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">類型</label>
+                  <select name="type" required className="w-full border border-gray-300 rounded-md px-3 py-2 text-gray-900" defaultValue={editingMemory.type}>
+                    <option value="hot">熱記憶</option>
+                    <option value="cold">冷記憶</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">內容</label>
+                  <textarea 
+                    name="content" 
+                    required 
+                    rows={4}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-gray-900"
+                    placeholder="輸入記憶內容..."
+                    defaultValue={editingMemory.content}
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">標籤 (以逗號分隔)</label>
+                  <input 
+                    type="text" 
+                    name="tags" 
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-gray-900"
+                    placeholder="例如：重要,提醒,學習"
+                    defaultValue={editingMemory.tags.join(', ')}
+                  />
+                </div>
+              </div>
+              
+              <div className="flex justify-end space-x-2 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setEditingMemory(null)}
+                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+                >
+                  取消
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                  更新
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

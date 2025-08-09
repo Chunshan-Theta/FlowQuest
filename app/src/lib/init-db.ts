@@ -3,7 +3,7 @@
  * 用於創建初始資料和索引
  */
 
-import { getAgentsCollection, testConnection } from './mongodb';
+import { getAgentsCollection, testConnection, getDatabase } from './mongodb';
 import { EXAMPLES } from '../types';
 
 export async function initializeDatabase() {
@@ -57,6 +57,21 @@ async function createIndexes() {
     
     // 為 created_at 字段創建索引以優化排序
     await agentsCollection.createIndex({ created_at: -1 });
+    
+    // 記憶集合複合索引（如果存在）
+    try {
+      const db = await getDatabase();
+      const memCol = db.collection('memories');
+      await memCol.createIndex({
+        agent_id: 1,
+        created_by_user_id: 1,
+        activity_id: 1,
+        session_id: 1,
+        created_at: 1,
+      });
+    } catch (e) {
+      console.warn('建立 memories 索引時發生問題（可能集合尚未存在）');
+    }
     
     console.log('數據庫索引創建成功');
   } catch (error) {
