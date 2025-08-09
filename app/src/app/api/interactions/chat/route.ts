@@ -4,6 +4,7 @@ import { getAgentsCollection, getCoursePackagesCollection, getSessionsCollection
 import { getOpenAIClient } from '@/lib/openai';
 import { buildSystemPrompt } from '@/lib/prompt';
 import { ObjectId } from 'mongodb';
+import { DEFAULT_CONFIG } from '@/types';
 
 function extractKeywords(text: string): string[] {
   return text
@@ -88,6 +89,66 @@ export async function POST(request: NextRequest) {
       content: String(l.content || ''),
     }));
 
+    // Enforce max turns per unit (before any LLM calls)
+    const currentTurnCount = (existing?.unit_results || [])
+      .find((u: any) => String(u.unit_id) === String(currentUnitId))?.turn_count || 0;
+    const maxTurns = unitObj?.max_turns ?? DEFAULT_CONFIG.UNIT.MAX_TURNS;
+    if (unitObj && currentTurnCount >= maxTurns) {
+      const now = new Date();
+      const unitResults = (existing?.unit_results || []).map((u: any) => ({ ...u }));
+      const idxCur = unitResults.findIndex((u: any) => String(u.unit_id) === String(currentUnitId));
+      if (idxCur === -1) {
+        unitResults.push({
+          unit_id: currentUnitId!,
+          status: 'failed' as const,
+          turn_count: currentTurnCount,
+          important_keywords: [] as string[],
+          standard_pass_rules: (unitObj?.pass_condition?.value || []) as string[],
+          conversation_logs: existingUnitLogs as any[],
+        });
+      } else {
+        unitResults[idxCur].status = 'failed';
+      }
+
+      let transitioned = false;
+      let courseCompleted = false;
+      const idxUnit = units.findIndex((u: any) => String(u._id) === String(currentUnitId));
+      const nextUnit = idxUnit >= 0 && idxUnit + 1 < units.length ? units[idxUnit + 1] : undefined;
+      const memorySnapshot = [...hotMemories, ...coldMemories];
+      if (nextUnit) {
+        transitioned = true;
+        const nextIntro = nextUnit?.intro_message;
+        const nextPrompt = buildSystemPrompt({ agent: agent as any, unit: nextUnit as any, coursePackage: course as any, context: '', hotMemories: hotMemories as any });
+        const nextUnitExistingIdx = unitResults.findIndex((u: any) => String(u.unit_id) === String(nextUnit._id));
+        const introLog = nextIntro ? [{ role: 'assistant', content: nextIntro, timestamp: now, system_prompt: nextPrompt, memories: memorySnapshot }] as any[] : [];
+        if (nextUnitExistingIdx === -1) {
+          unitResults.push({
+            unit_id: String(nextUnit._id),
+            status: 'failed' as const,
+            turn_count: 0,
+            important_keywords: [] as string[],
+            standard_pass_rules: (nextUnit?.pass_condition?.value || []) as string[],
+            conversation_logs: introLog,
+          });
+        } else if (introLog.length > 0 && (unitResults[nextUnitExistingIdx].conversation_logs || []).length === 0) {
+          unitResults[nextUnitExistingIdx].conversation_logs = introLog;
+          unitResults[nextUnitExistingIdx].standard_pass_rules = (nextUnit?.pass_condition?.value || []) as string[];
+        }
+      } else {
+        courseCompleted = true;
+      }
+
+      const updateSet: any = { activity_id, user_id, session_id, user_name, unit_results: unitResults, generated_at: now };
+      if (courseCompleted) {
+        updateSet.summary = `課程完成於 ${new Date().toLocaleString('zh-TW')}`;
+      }
+      await sessions.updateOne(filter as any, { $set: updateSet }, { upsert: true });
+      const saved = await sessions.findOne(filter as any);
+
+      const limitMsg = '已達本關卡最大輪數，已自動進入下一關（若有）。';
+      return NextResponse.json({ success: true, data: { message: limitMsg, session: saved, transitioned, courseCompleted } } as ApiResponse<any>);
+    }
+
     // 2nd stage: from cold memories, pick relevant ones via LLM
     if (coldMemories.length > 0) {
       const coldList = coldMemories.map((m, i) => `${i + 1}. ${m.content}`).join('\n');
@@ -98,22 +159,24 @@ export async function POST(request: NextRequest) {
           { role: 'system', content: '你是一個記憶分析助手，負責判斷記憶與用戶輸入的相關性。' },
           { role: 'user', content: selectPrompt },
         ],
-        temperature: 0,
-        max_tokens: 50,
+        max_completion_tokens: 1024,
       });
       const selText = (sel.choices[0]?.message?.content || '').trim();
       if (selText && !/^無$/i.test(selText)) {
-        const idxs = selText
-          .split(/[,，\s]+/)
-          .map((s) => parseInt(s.trim(), 10))
-          .filter((n) => !isNaN(n) && n > 0 && n <= coldMemories.length)
-          .map((n) => n - 1);
-        const relevantCold = idxs.map((i) => coldMemories[i]);
-        // Promote to hot for this turn
-        hotMemories = [
-          ...hotMemories,
-          ...relevantCold.map((m) => ({ ...m, type: 'hot' as const })),
-        ];
+        const normalized = selText.trim();
+        if (!/^(無|无|none)[。.\s]*$/i.test(normalized)) {
+          const idxs = normalized
+            .split(/[,，\s]+/)
+            .map((s) => parseInt(s.trim(), 10))
+            .filter((n) => !isNaN(n) && n > 0 && n <= coldMemories.length)
+            .map((n) => n - 1);
+          const relevantCold = idxs.map((i) => coldMemories[i]);
+          // Promote to hot for this turn
+          hotMemories = [
+            ...hotMemories,
+            ...relevantCold.map((m) => ({ ...m, type: 'hot' as const })),
+          ];
+        }
       }
     }
 
@@ -185,14 +248,13 @@ export async function POST(request: NextRequest) {
           { role: 'system', content: '你是一個記憶整合助手，負責選擇最重要的記憶。' },
           { role: 'user', content: consPrompt },
         ],
-        temperature: 0.2,
-        max_tokens: 1024,
+        max_completion_tokens: 1024,
       });
       const consText = (cons.choices[0]?.message?.content || '').trim();
       const lines = consText.split('\n');
       for (let i = 0; i < targetCount; i++) {
         const idx = i + 1;
-        const re = new RegExp(`記憶${idx}:\s*(.+)`, 'i');
+        const re = new RegExp(`記憶${idx}:\\s*(.+)`, 'i');
         const line = lines.find((l) => re.test(l));
         if (line) {
           const m = line.match(re);
@@ -227,11 +289,22 @@ export async function POST(request: NextRequest) {
           await memCol.insertMany(consolidated);
         }
         // Update snapshot arrays
+        const isCurrentDynamic = (m: any) =>
+          m.created_by_user_id === String(user_id) &&
+          String(m.activity_id) === String(activity_id) &&
+          String(m.session_id) === String(session_id);
+
+        const demotedDynamic = hotMemories.filter(isCurrentDynamic);
+        const stillHot = hotMemories.filter((m) => !isCurrentDynamic(m));
+
         coldMemories = [
           ...coldMemories,
-          ...hotMemories.map((m: any) => ({ ...m, type: 'cold' })),
+          ...demotedDynamic.map((m: any) => ({ ...m, type: 'cold' })),
         ];
-        hotMemories = consolidated;
+        hotMemories = [
+          ...stillHot,
+          ...consolidated,
+        ];
       }
     }
 
@@ -268,6 +341,9 @@ export async function POST(request: NextRequest) {
     let transitioned = false;
     let courseCompleted = false;
     let isPassed = false;
+    const currentTurnAfterAppend = (unitResults.find((u: any) => String(u.unit_id) === String(currentUnitId))?.turn_count) || 0;
+    const maxTurnsAfterAppend = unitObj?.max_turns ?? DEFAULT_CONFIG.UNIT.MAX_TURNS;
+    const reachedLimit = currentTurnAfterAppend >= maxTurnsAfterAppend;
 
     if (unitObj?.pass_condition?.type === 'keyword') {
       const currentUnitLogs = (unitResults.find((u: any) => String(u.unit_id) === String(currentUnitId))?.conversation_logs || []) as any[];
@@ -284,13 +360,12 @@ export async function POST(request: NextRequest) {
       const judge = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [{ role: 'user', content: checkPrompt }],
-        temperature: 0,
-        max_tokens: 100,
+        max_completion_tokens: 1024,
       });
       const result = (judge.choices[0]?.message?.content || '');
-      const resultLower = result.toLowerCase();
-      isPassed = resultLower.includes('yes') && !resultLower.includes('no');
-      console.log('judgeResult:', result);
+      const normalized = result.trim().toLowerCase();
+      isPassed = /^yes\b/.test(normalized);
+      console.log('judgeResult:', judge.choices[0]?.message);
       console.log('isPassed:', isPassed);
       console.log('=== LLM PASS CHECK END ===');
     }
@@ -302,6 +377,34 @@ export async function POST(request: NextRequest) {
         target?.conversation_logs?.push({ role: 'assistant', content: String(unitObj.outro_message), timestamp: now, system_prompt: outroPrompt, memories: memorySnapshot } as any);
       }
       if (target) target.status = 'passed';
+      const idxUnit = units.findIndex((u: any) => String(u._id) === String(currentUnitId));
+      const nextUnit = idxUnit >= 0 && idxUnit + 1 < units.length ? units[idxUnit + 1] : undefined;
+      if (nextUnit) {
+        transitioned = true;
+        const nextIntro = nextUnit?.intro_message;
+        const nextPrompt = buildSystemPrompt({ agent: agent as any, unit: nextUnit as any, coursePackage: course as any, context: '', hotMemories: hotMemories as any });
+        const nextUnitExistingIdx = unitResults.findIndex((u: any) => String(u.unit_id) === String(nextUnit._id));
+        const introLog = nextIntro ? [{ role: 'assistant', content: nextIntro, timestamp: now, system_prompt: nextPrompt, memories: memorySnapshot }] as any[] : [];
+        if (nextUnitExistingIdx === -1) {
+          unitResults.push({
+            unit_id: String(nextUnit._id),
+            status: 'failed' as const,
+            turn_count: 0,
+            important_keywords: [] as string[],
+            standard_pass_rules: (nextUnit?.pass_condition?.value || []) as string[],
+            conversation_logs: introLog,
+          });
+        } else if (introLog.length > 0 && (unitResults[nextUnitExistingIdx].conversation_logs || []).length === 0) {
+          unitResults[nextUnitExistingIdx].conversation_logs = introLog;
+          unitResults[nextUnitExistingIdx].standard_pass_rules = (nextUnit?.pass_condition?.value || []) as string[];
+        }
+      } else {
+        courseCompleted = true;
+      }
+    } else if (reachedLimit) {
+      // 未通關且達到最大輪數：直接換到下一關
+      const target = unitResults.find((u: any) => String(u.unit_id) === String(currentUnitId));
+      if (target) target.status = 'failed';
       const idxUnit = units.findIndex((u: any) => String(u._id) === String(currentUnitId));
       const nextUnit = idxUnit >= 0 && idxUnit + 1 < units.length ? units[idxUnit + 1] : undefined;
       if (nextUnit) {

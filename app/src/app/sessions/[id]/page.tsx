@@ -40,7 +40,7 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
 
       {session.summary && (
         <div className="bg-white border rounded p-4">
-          <h2 className="font-semibold mb-2">摘要</h2>
+          <h2 className="font-semibold mb-2" style={{ color: '#333' }}>摘要</h2>
           <p className="whitespace-pre-wrap text-gray-800">{session.summary}</p>
         </div>
       )}

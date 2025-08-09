@@ -34,15 +34,15 @@ export function buildSystemPrompt(params: {
 
   if (context && hotMemories.length > 0) {
     prompt += `\n\n你的角色記憶：`;
-    hotMemories.slice(0, 5).forEach((memory, index) => {
+    hotMemories.slice(0, 3).forEach((memory, index) => {
       prompt += `\n${index + 1}. ${memory.content}`;
-      if (memory.tags.length > 0) {
-        prompt += ` (標籤: ${memory.tags.join(', ')})`;
-      }
+      // if (memory.tags.length > 0) {
+      //   prompt += ` (標籤: ${memory.tags.join(', ')})`;
+      // }
     });
   }
 
-  prompt += `\n\n請基於你的角色性格進行對話扮演，確保回應是符合覺色性格，並保持一致的回應立場在進行回應。`;
+  prompt += `\n\n請基於你的角色性格進行對話扮演，確保回應是符合角色性格和回應立場。`;
   console.log('--------------------------------');
   console.log('-----------System Prompt-----------');
   console.log(prompt);

@@ -36,6 +36,7 @@ export default function ActivityChatPage() {
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [userName, setUserName] = useState<string>('');
   const [userNameError, setUserNameError] = useState<string | null>(null);
+  const [isWaiting, setIsWaiting] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -371,10 +372,11 @@ export default function ActivityChatPage() {
 
   // 發送訊息
   const handleSendMessage = async () => {
-    if (!currentMessage.trim() || !activity || /* isLoading */ false || !sessionId) return;
+    if (!currentMessage.trim() || !activity || isWaiting || !sessionId) return;
 
     const message = currentMessage.trim();
     setCurrentMessage('');
+    setIsWaiting(true);
 
     try {
       // 全交由後端 interactions 處理
@@ -410,7 +412,11 @@ export default function ActivityChatPage() {
               currentUnitId: reconstructed.current_unit_id,
               messages: reconstructed.messages.map(m => `${m.role}(${m.unit_id}): ${m.content.substring(0, 50)}...`)
             });
-            setChatSession(reconstructed);
+            // 若後端宣告課程完成，標記完成並開啟完成視窗
+            const isCompleted = !!json?.data?.courseCompleted;
+            const finalSession = { ...reconstructed, is_completed: isCompleted };
+            setChatSession(finalSession);
+            if (isCompleted) setShowCompletionModal(true);
             if (!reportId) setReportId(serverSession?._id?.toString?.() || null);
           } catch (error) {
             console.error('❌ 重建會話失敗:', error);
@@ -418,6 +424,8 @@ export default function ActivityChatPage() {
         }
     } catch (error) {
       console.error('發送訊息失敗:', error);
+    } finally {
+      setIsWaiting(false);
     }
   };
 
@@ -499,12 +507,28 @@ export default function ActivityChatPage() {
       timestamp: l.timestamp,
       unit_id: l.unit_id,
     }));
+
+    // 相鄰訊息去重：避免單位切換時重複渲染相同的助理回覆
+    const deduped: ChatMessage[] = [];
+    for (const m of messages) {
+      const last = deduped[deduped.length - 1];
+      if (
+        last &&
+        last.role === m.role &&
+        last.content === m.content &&
+        Math.abs(new Date(m.timestamp).getTime() - new Date(last.timestamp).getTime()) < 2000
+      ) {
+        continue;
+      }
+      deduped.push(m);
+    }
     
+    // 計算目前回合數（以當前單元為準）
     const currentTurn = (unitResults.find((u: any) => String(u.unit_id) === String(currentUnitId))?.turn_count) || 0;
     
     console.log('重建聊天會話:', {
       unitResults: unitResults.length,
-      totalMessages: messages.length,
+      totalMessages: deduped.length,
       currentUnitId,
       messagesByUnit: unitResults.map(ur => ({ 
         unit_id: ur.unit_id, 
@@ -515,11 +539,11 @@ export default function ActivityChatPage() {
     return {
       activity_id: (activity?._id || serverSession?.activity_id)?.toString?.() || '',
       current_unit_id: currentUnitId,
-      messages,
+      messages: deduped,
       current_turn: currentTurn,
       is_completed: false,
-      started_at: messages[0]?.timestamp || new Date(),
-      updated_at: messages[messages.length - 1]?.timestamp || new Date(),
+      started_at: deduped[0]?.timestamp || new Date(),
+      updated_at: deduped[deduped.length - 1]?.timestamp || new Date(),
     };
   };
 
@@ -608,9 +632,12 @@ export default function ActivityChatPage() {
                          <div>
                <h1 className="text-lg font-semibold text-gray-800">{activity.name}</h1>
                <p className="text-sm text-gray-600">
-                 與 {agent.name} 對話
-                 {currentUnit && ` - ${currentUnit.title}`}
-               </p>
+                  與 {agent.name} 對話
+                  {currentUnit && ` - ${currentUnit.title}`}
+                  {(isLoading || isWaiting) && (
+                    <span className="ml-2 text-xs text-gray-500 animate-pulse">對方正在輸入…</span>
+                  )}
+                </p>
                <div className="text-xs text-gray-700">Session: {sessionId}</div>
              </div>
           </div>
@@ -711,7 +738,7 @@ export default function ActivityChatPage() {
             );
           })}
           
-          {isLoading && (
+          {(isLoading || isWaiting) && (
             <div className="flex justify-start">
               <div className="bg-gray-200 rounded-lg px-4 py-2 max-w-xs">
                 <div className="flex space-x-1">
@@ -736,12 +763,12 @@ export default function ActivityChatPage() {
               onChange={(e) => setCurrentMessage(e.target.value)}
               onKeyPress={handleKeyPress}
               placeholder="輸入您的訊息..."
-              disabled={isLoading || chatSession?.is_completed}
+              disabled={isLoading || isWaiting || chatSession?.is_completed}
               className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-500"
             />
             <button
               onClick={handleSendMessage}
-              disabled={!currentMessage.trim() || isLoading || chatSession?.is_completed}
+              disabled={!currentMessage.trim() || isLoading || isWaiting || chatSession?.is_completed}
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
               發送
