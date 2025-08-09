@@ -7,7 +7,7 @@ FlowQuest 現在支援與 AI Agent 進行互動式對話，讓用戶可以透過
 ## 功能特色
 
 ### 🤖 AI Agent 對話
-- 基於 OpenAI GPT-3.5-turbo 模型
+- 使用可設定的 OpenAI 模型（預設：gpt-4o / gpt-4o-mini）
 - 根據 Agent 設定的人格特質進行對話
 - 結合活動記憶內容提供個性化體驗
 

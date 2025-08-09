@@ -2,7 +2,12 @@
 
 ## 專案概述
 
-FlowQuest 是一個基於 Next.js 的 AI 互動式學習平台，提供個性化的學習體驗和智能代理互動功能。
+FlowQuest 是一個基於 Next.js 的 AI 通關式對話互動平台。使用者可透過關卡化（通關）對話完成任務與學習；系統內建多層次的資訊與記憶管理（活動/單元/課程包/Agent/會話、長短期記憶），並可彙整與查閱整體結果/報告；同時提供視覺化介面與 API 雙通道操作。
+
+- 通關式對話流程：以活動→→關卡→→Agent為主線，逐步包裹學習內容
+- 多層次資訊/記憶：支援活動、單元、課程包、Agent 的長短期記憶
+- 總體結果查閱：提供對話紀錄彙整與互動報告
+- 介面與 API：可透過 Web 介面操作，或呼叫 API 端點整合到其他系統
 
 ## 技術架構
 
@@ -16,21 +21,22 @@ FlowQuest 是一個基於 Next.js 的 AI 互動式學習平台，提供個性化
 
 ```
 FlowQuest/
-├── src/
-│   ├── app/                    # Next.js App Router
-│   │   ├── agents/            # Agent 管理頁面
-│   │   ├── api/               # API 路由
-│   │   └── globals.css        # 全域樣式
-│   ├── components/            # React 元件
-│   └── types/                 # TypeScript 型別定義
-│       ├── base.ts            # 基礎型別
-│       ├── agent.ts           # Agent 相關型別
-│       ├── course-package.ts  # 課程包型別
-│       ├── unit.ts            # 單元型別
-│       ├── activity.ts        # 活動型別
-│       ├── interaction.ts     # 互動記錄型別
-│       ├── memory.ts          # 記憶體型別
-│       └── report.ts          # 報告型別
+├── app/
+│   ├── src/
+│   │   ├── app/                    # Next.js App Router
+│   │   │   ├── agents/            # Agent 管理頁面
+│   │   │   ├── api/               # API 路由
+│   │   │   └── globals.css        # 全域樣式
+│   │   ├── components/            # React 元件
+│   │   └── types/                 # TypeScript 型別定義
+│   │       ├── base.ts            # 基礎型別
+│   │       ├── agent.ts           # Agent 相關型別
+│   │       ├── course-package.ts  # 課程包型別
+│   │       ├── unit.ts            # 單元型別
+│   │       ├── activity.ts        # 活動型別
+│   │       ├── interaction.ts     # 互動記錄型別
+│   │       ├── memory.ts          # 記憶體型別
+│   ├── package.json
 ├── docker-compose.yml         # Docker 服務配置
 ├── mongo-init/               # MongoDB 初始化腳本
 └── README.md                 # 專案說明
@@ -101,13 +107,11 @@ npm run dev
 
 ### 資料庫集合
 
-- `agentProfiles` - Agent 檔案資料
-- `coursePackages` - 課程包資料
+- `agents` - Agent 檔案資料
+- `course_packages` - 課程包資料
 - `units` - 學習單元資料
-- `activities` - 學習活動記錄
-- `agentMemories` - Agent 記憶體資料
-- `interactionLogs` - 互動記錄
-- `interactionReports` - 互動報告
+- `activities` - 活動資料
+- `sessions` - 會話資料
 
 ## API 端點
 
@@ -117,6 +121,117 @@ npm run dev
 - `POST /api/agents` - 建立新 Agent
 - `PUT /api/agents/[id]` - 更新 Agent
 - `DELETE /api/agents/[id]` - 刪除 Agent
+
+### API 快速啟動與測試
+
+前置條件：已設定環境變數 `OPENAI_API_KEY`、`MONGODB_URI`、`MONGODB_DB_NAME`，並啟動服務。
+
+```bash
+# 啟動 MongoDB 與開發伺服器
+docker-compose up -d
+npm run dev
+```
+
+0) 先建立 Agent、課程包、關卡、活動（互動前置）
+
+- 建立 Agent
+```bash
+curl -s -X POST http://localhost:3000/api/agents \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "客服助理A",
+    "persona": {"tone":"friendly","background":"客服專員","voice":"female"},
+    "memories": []
+  }'
+```
+
+- 建立課程包（取得 `course_package_id`）
+```bash
+curl -s -X POST http://localhost:3000/api/course-packages \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "新手上路",
+    "description": "導覽與開場"
+  }'
+```
+
+- 建立關卡（至少一關；`course_package_id` 需替換）
+```bash
+curl -s -X POST http://localhost:3000/api/units \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "開場問候",
+    "course_package_id": "YOUR_COURSE_PACKAGE_ID",
+    "agent_role": "客服",
+    "user_role": "顧客",
+    "intro_message": "嗨，很高興為你服務！",
+    "outro_message": "本關卡結束，繼續下一步吧。",
+    "max_turns": 5,
+    "agent_behavior_prompt": "保持友善、簡潔與明確。",
+    "pass_condition": {"type": "keyword", "value": ["你好", "開始"]},
+    "order": 1,
+    "difficulty_level": 1
+  }'
+```
+
+- 建立活動（綁定 `agent_profile_id` 與 `course_package_id`）
+```bash
+curl -s -X POST http://localhost:3000/api/activities \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "導覽活動",
+    "course_package_id": "YOUR_COURSE_PACKAGE_ID",
+    "agent_profile_id": "YOUR_AGENT_ID"
+  }'
+```
+
+1) 測試資料庫連線/初始化
+```bash
+curl -s "http://localhost:3000/api/db/test"
+curl -s "http://localhost:3000/api/db/test?init=true"
+```
+
+2) 初始化互動 Session（通關流程起點）
+```bash
+curl -s -X POST http://localhost:3000/api/interactions/initialize \
+  -H "Content-Type: application/json" \
+  -d '{
+    "activity_id": "YOUR_ACTIVITY_ID",
+    "session_id": "test-session-001",
+    "user_id": "demo-user",
+    "user_name": "Demo"
+  }'
+```
+
+3) 進行關卡式對話
+```bash
+curl -s -X POST http://localhost:3000/api/interactions/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "activity_id": "YOUR_ACTIVITY_ID",
+    "session_id": "test-session-001",
+    "user_id": "demo-user",
+    "message": "嗨，開始吧"
+  }'
+```
+
+4) 檢視 Session 結果（包含單元進度、對話日誌、判定等）
+```bash
+curl -s "http://localhost:3000/api/sessions?activity_id=YOUR_ACTIVITY_ID&session_id=test-session-001"
+```
+
+5) 簡易聊天 API（非通關流程）
+```bash
+curl -s -X POST http://localhost:3000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {"role":"user","content":"說個笑話"}
+    ],
+    "max_tokens": 200,
+    "temperature": 0.7
+  }'
+```
 
 ## 開發指南
 
@@ -155,13 +270,3 @@ npm run dev
 ## 聯絡資訊
 
 如有任何問題或建議，請開啟 Issue 進行討論。
-
-您好，現在來為您服務
-很抱歉貴賓，耽誤到您寶貴的時間
-沒問題感謝您的建議，尊貴的客人
-是的沒問題，感謝您指導我們
-沒問題現在為您點餐
-沒問題那我這邊幫您取消您的漢堡 換成雞塊餐
-
-好了～這邊是您的餐點～
-，為了保持最好的品質我們都是現場處理的～ 很抱歉讓您久後了
