@@ -73,12 +73,6 @@ export async function getActivitiesCollection(): Promise<Collection<Activity>> {
   return db.collection<Activity>('activities');
 }
 
-// 仍提供 reports 集合以相容舊程式碼（使用 any 型別）
-export async function getReportsCollection(): Promise<Collection<any>> {
-  const db = await getDatabase();
-  return db.collection<any>('reports');
-}
-
 // 獲取 sessions 集合
 export async function getSessionsCollection(): Promise<Collection<SessionRecord>> {
   const db = await getDatabase();

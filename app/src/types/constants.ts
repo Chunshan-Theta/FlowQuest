@@ -97,10 +97,6 @@ export const ERROR_MESSAGES = {
   INTERACTION_MESSAGE_TOO_LONG: '訊息長度超過限制',
   INTERACTION_MESSAGE_TOO_SHORT: '訊息長度過短',
   INTERACTION_TURN_INVALID: '回合索引無效',
-  
-  // Report 相關
-  REPORT_NOT_FOUND: '找不到指定的報告',
-  REPORT_GENERATION_FAILED: '報告生成失敗',
 } as const;
 
 // ================================
@@ -121,7 +117,6 @@ export const SUCCESS_MESSAGES = {
   ACTIVITY_STARTED: '活動開始成功',
   ACTIVITY_COMPLETED: '活動完成成功',
   INTERACTION_LOGGED: '互動記錄成功',
-  REPORT_GENERATED: '報告生成成功',
 } as const;
 
 // ================================
@@ -192,7 +187,6 @@ export const API_ROUTES = {
   MEMORIES: '/api/memories',
   ACTIVITIES: '/api/activities',
   INTERACTIONS: '/api/interactions',
-  REPORTS: '/api/reports',
 } as const;
 
 // ================================

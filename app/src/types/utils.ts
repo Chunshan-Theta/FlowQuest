@@ -10,7 +10,8 @@ import { AgentProfile } from './agent';
 import { AgentMemory, MemoryType } from './memory';
 import { Activity, ActivityStatus } from './activity';
 import { InteractionLog } from './interaction';
-import { UnitResultStatus } from './report';
+// report 類型已淘汰，但工具函數仍可用於驗證基本字串
+export type UnitResultStatus = 'passed' | 'failed';
 
 import {
   ACTIVITY_STATUS,
