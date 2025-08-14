@@ -120,7 +120,7 @@ async function runBackgroundUpdates(params: {
       const coldList = coldMemories.map((m, i) => `${i + 1}. ${m.content}`).join('\n');
       const selectPrompt = `請分析以下冷記憶是否與用戶輸入相關。\n\n冷記憶列表：\n${coldList}\n\n用戶輸入：${message}\n\n請只返回相關記憶的編號（用逗號分隔），如果沒有相關的請返回"無"。例如：1,3,5 或 無`;
       const sel = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model: 'gpt-4.1-nano',
         messages: [
           { role: 'system', content: '你是一個記憶分析助手，負責判斷記憶與用戶輸入的相關性。' },
           { role: 'user', content: selectPrompt },
@@ -130,7 +130,7 @@ async function runBackgroundUpdates(params: {
       const selText = (sel.choices[0]?.message?.content || '').trim();
       if (selText && !/^無$/i.test(selText)) {
         const normalized = selText.trim();
-        if (!/^(無|无|none)[。.\s]*$/i.test(normalized)) {
+        if (!/^(無|无|none)[。."\s]*$/i.test(normalized)) {
           const idxs = normalized
             .split(/[,，\s]+/)
             .map((s) => parseInt(s.trim(), 10))
@@ -184,7 +184,7 @@ async function runBackgroundUpdates(params: {
       const hotText = hotMemories.map((m, i) => `${i + 1}. ${m.content}`).join('\n');
       const consPrompt = `請整合以下熱記憶，將 ${hotMemories.length} 條記憶整合成 ${targetCount} 條新的記憶。\n\n當前熱記憶（${hotMemories.length} 條）：\n${hotText}\n\n對方說：${message}\n\n你回應：${assistant}\n\n請分析這些記憶，將相關的記憶整合成新的記憶。整合時要：\n1. 保留重要的信息\n2. 合併相似或相關的內容\n3. 最終生成 ${targetCount} 條新的整合記憶\n\n請返回整合後的新記憶內容，格式如下：\n記憶1: [新記憶內容]\n記憶2: [新記憶內容]\n...\n記憶${targetCount}: [新記憶內容]`;
       const cons = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model: 'gpt-4.1-nano',
         messages: [
           { role: 'system', content: '你是一個記憶整合助手，負責選擇最重要的記憶。' },
           { role: 'user', content: consPrompt },
@@ -304,7 +304,7 @@ async function runBackgroundUpdates(params: {
       const convoText = currentUnitLogs.map((l) => `${l.role}: ${l.content}`).join('\n');
       const checkPrompt = `請判斷以下對話是否滿足通過條件：\n\n通過條件：${(unitObj.pass_condition.value || []).join(', ')}\n\n對話內容：\n${convoText}\n\n請只回答 "YES" 或 "NO"，並簡單說明原因。`;
       const judge = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model: 'gpt-4.1-nano',
         messages: [{ role: 'user', content: checkPrompt }],
         max_completion_tokens: 1024,
       });
@@ -411,23 +411,27 @@ export async function POST(request: NextRequest) {
     const activity = await activities.findOne({ _id: activity_id } as any);
     if (!activity) return NextResponse.json({ success: false, error: '找不到活動' } as ApiResponse<any>, { status: 404 });
 
-    const agent = await agentsCol.findOne({ _id: activity.agent_profile_id } as any) as any as AgentProfile;
-    const course = await cpCol.findOne({ _id: activity.course_package_id } as any) as any as CoursePackage;
-    const units = await unitsCol.find({ course_package_id: String(activity.course_package_id) } as any).sort({ order: 1 }).toArray();
+    // Parallelize dependent reads after we have activity
+    const [agent, course, units, existing, dynamicMemories] = await Promise.all([
+      agentsCol.findOne({ _id: activity.agent_profile_id } as any) as any as AgentProfile,
+      cpCol.findOne({ _id: activity.course_package_id } as any) as any as CoursePackage,
+      unitsCol.find({ course_package_id: String(activity.course_package_id) } as any).sort({ order: 1 }).toArray(),
+      sessions.findOne({ activity_id, user_id, session_id } as any) as any as SessionRecord | null,
+      memCol
+        .find({
+          agent_id: String(activity.agent_profile_id || ''),
+          created_by_user_id: String(user_id),
+          activity_id: String(activity_id),
+          session_id: String(session_id),
+        })
+        .sort({ created_at: 1 })
+        .limit(200)
+        .toArray(),
+    ]);
 
     // Baseline memories: agent + activity + dynamic (persisted)
     const agentMemories = ((agent as any)?.memories || []) as any[];
     const activityMemories = ((activity as any)?.memories || []) as any[];
-    const dynamicMemories = await memCol
-      .find({
-        agent_id: String((agent as any)?._id || ''),
-        created_by_user_id: String(user_id),
-        activity_id: String(activity_id),
-        session_id: String(session_id),
-      })
-      .sort({ created_at: 1 })
-      .toArray();
-
     let baseHotMemories = [
       ...agentMemories.filter((m: any) => m.type === 'hot'),
       ...activityMemories.filter((m: any) => m.type === 'hot'),
@@ -441,8 +445,6 @@ export async function POST(request: NextRequest) {
 
     // Determine current unit from latest session
     const filter = { activity_id, user_id, session_id };
-    const existing = await sessions.findOne(filter as any) as any as SessionRecord | null;
-
     let currentUnitId: string | undefined;
     if (existing && existing.unit_results?.length) {
       const lastWithLogs = [...existing.unit_results].reverse().find(u => (u.conversation_logs?.length || 0) > 0);
@@ -455,10 +457,10 @@ export async function POST(request: NextRequest) {
 
     const openai = getOpenAIClient();
 
-    // Prepare prior conversation history for current unit (limit last 10 logs)
+    // Prepare prior conversation history for current unit (limit last 2 exchanges = 4 logs)
     const existingUnitLogs = (existing?.unit_results || [])
       .find((u: any) => String(u.unit_id) === String(currentUnitId))?.conversation_logs || [];
-    const historyLogs = existingUnitLogs.slice(-10).map((l: any) => ({
+    const historyLogs = existingUnitLogs.slice(-4).map((l: any) => ({
       role: (l.role === 'assistant' ? 'assistant' : 'user') as 'assistant' | 'user',
       content: String(l.content || ''),
     }));
@@ -523,10 +525,9 @@ export async function POST(request: NextRequest) {
     const now = new Date();
     const unitResults = (existing?.unit_results || []).map((u: any) => ({ ...u }));
     const idx = unitResults.findIndex((u: any) => String(u.unit_id) === String(currentUnitId));
-    const memorySnapshot = [...baseHotMemories, ...baseColdMemories];
     const logsAppend = [
-      { role: 'user', content: message, timestamp: now, system_prompt: systemPrompt, memories: memorySnapshot },
-      { role: 'assistant', content: assistant, timestamp: now, memories: memorySnapshot },
+      { role: 'user', content: message, timestamp: now },
+      { role: 'assistant', content: assistant, timestamp: now },
     ];
     if (idx === -1) {
       unitResults.push({
@@ -562,6 +563,80 @@ export async function POST(request: NextRequest) {
       generated_at: now,
     } as any;
 
+    // Compute immediate transition flags for the response (keyword pass or turn limit)
+    const currentTurnAfterAppend = (unitResults.find((u: any) => String(u.unit_id) === String(currentUnitId))?.turn_count) || 0;
+    const maxTurnsAfterAppend = unitObj?.max_turns ?? DEFAULT_CONFIG.UNIT.MAX_TURNS;
+    const reachedLimitAfterAppend = currentTurnAfterAppend >= maxTurnsAfterAppend;
+
+    let willPass = false;
+    if (unitObj?.pass_condition?.type === 'keyword') {
+      const currentUnitLogs = ((unitResults.find((u: any) => String(u.unit_id) === String(currentUnitId))?.conversation_logs) || []).slice(-4) as any[];
+      const allUserText = currentUnitLogs
+        .filter((l) => l.role === 'user')
+        .map((l) => String(l.content).toLowerCase())
+        .join(' ');
+      willPass = (unitObj.pass_condition.value || []).every((k: any) => allUserText.includes(String(k).toLowerCase()));
+    } else if (unitObj?.pass_condition?.type === 'llm') {
+      // Avoid extra blocking LLM call; background job will handle authoritative pass check
+      willPass = false;
+    }
+
+    const idxUnitForNext = units.findIndex((u: any) => String(u._id) === String(currentUnitId));
+    const nextUnit = idxUnitForNext >= 0 && idxUnitForNext + 1 < units.length ? units[idxUnitForNext + 1] : undefined;
+    const transitionedNow = (willPass || reachedLimitAfterAppend) && !!nextUnit;
+    const courseCompletedNow = (willPass || reachedLimitAfterAppend) && !nextUnit;
+
+    // Reflect pass/transition in the immediate previewSession (no DB writes here)
+    if (willPass) {
+      const targetIdx = unitResults.findIndex((u: any) => String(u.unit_id) === String(currentUnitId));
+      const target = targetIdx >= 0 ? unitResults[targetIdx] : undefined;
+      if (target) {
+        if (unitObj?.outro_message) {
+          (target.conversation_logs = target.conversation_logs || []).push({ role: 'assistant', content: String(unitObj.outro_message), timestamp: now } as any);
+        }
+        target.status = 'passed';
+      }
+      if (nextUnit) {
+        const nextIntro = nextUnit?.intro_message;
+        const nextUnitExistingIdx = unitResults.findIndex((u: any) => String(u.unit_id) === String(nextUnit._id));
+        const introLog = nextIntro ? [{ role: 'assistant', content: nextIntro, timestamp: now }] as any[] : [];
+        if (nextUnitExistingIdx === -1) {
+          unitResults.push({
+            unit_id: String(nextUnit._id),
+            status: 'failed' as const,
+            turn_count: 0,
+            important_keywords: [] as string[],
+            standard_pass_rules: (nextUnit?.pass_condition?.value || []) as string[],
+            conversation_logs: introLog,
+          });
+        } else if (introLog.length > 0 && (unitResults[nextUnitExistingIdx].conversation_logs || []).length === 0) {
+          unitResults[nextUnitExistingIdx].conversation_logs = introLog;
+          unitResults[nextUnitExistingIdx].standard_pass_rules = (nextUnit?.pass_condition?.value || []) as string[];
+        }
+      }
+    } else if (reachedLimitAfterAppend) {
+      const target = unitResults.find((u: any) => String(u.unit_id) === String(currentUnitId));
+      if (target) target.status = 'failed';
+      if (nextUnit) {
+        const nextIntro = nextUnit?.intro_message;
+        const nextUnitExistingIdx = unitResults.findIndex((u: any) => String(u.unit_id) === String(nextUnit._id));
+        const introLog = nextIntro ? [{ role: 'assistant', content: nextIntro, timestamp: now }] as any[] : [];
+        if (nextUnitExistingIdx === -1) {
+          unitResults.push({
+            unit_id: String(nextUnit._id),
+            status: 'failed' as const,
+            turn_count: 0,
+            important_keywords: [] as string[],
+            standard_pass_rules: (nextUnit?.pass_condition?.value || []) as string[],
+            conversation_logs: introLog,
+          });
+        } else if (introLog.length > 0 && (unitResults[nextUnitExistingIdx].conversation_logs || []).length === 0) {
+          unitResults[nextUnitExistingIdx].conversation_logs = introLog;
+          unitResults[nextUnitExistingIdx].standard_pass_rules = (nextUnit?.pass_condition?.value || []) as string[];
+        }
+      }
+    }
+
     // Kick off background updates (memories, consolidation, pass check, DB writes)
     setImmediate(() => {
       runBackgroundUpdates({
@@ -582,7 +657,7 @@ export async function POST(request: NextRequest) {
       });
     });
 
-    return NextResponse.json({ success: true, data: { message: assistant, session: previewSession, transitioned: false, courseCompleted: false } } as ApiResponse<any>);
+    return NextResponse.json({ success: true, data: { message: assistant, session: previewSession, transitioned: transitionedNow, courseCompleted: courseCompletedNow } } as ApiResponse<any>);
   } catch (error) {
     console.error('interaction chat error:', error);
     return NextResponse.json({ success: false, error: '對話失敗' } as ApiResponse<any>, { status: 500 });
