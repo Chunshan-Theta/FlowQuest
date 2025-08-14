@@ -110,16 +110,18 @@ async function main() {
   const userName = 'smoke';
 
   // 2) initialize
+  const tInitStart = Date.now();
   const { json: initJson } = await fetchJSON(`${BASE_URL}/api/interactions/initialize`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ activity_id: activity._id, session_id: sessionId, user_id: userId, user_name: userName }),
   });
+  const initElapsedMs = Date.now() - tInitStart;
   if (!initJson?.success) {
     console.error('Initialize failed:', initJson?.error || initJson);
     process.exit(1);
   }
-  console.log('[initialize] session_id =', initJson.data?.session_id || sessionId);
+  console.log('[initialize] session_id =', initJson.data?.session_id || sessionId, `(${initElapsedMs} ms)`);
 
   let prevSnapshot = summarizeSession(initJson.data || (await loadLatestSession(sessionId)) || {});
   console.log(`[initialize] units=${prevSnapshot.unitCount}, logs=${prevSnapshot.totalLogs}`);
@@ -132,19 +134,23 @@ async function main() {
     '請問有什麼可以幫忙的嗎',
   ];
 
+  let totalChatMs = 0;
   for (let i = 0; i < ROUNDS; i++) {
     const message = canned[i % canned.length];
+    const tChatStart = Date.now();
     const { json: chatJson } = await fetchJSON(`${BASE_URL}/api/interactions/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ activity_id: activity._id, session_id: sessionId, user_id: userId, user_name: userName, message }),
     });
+    const chatElapsedMs = Date.now() - tChatStart;
+    totalChatMs += chatElapsedMs;
     if (!chatJson?.success) {
       console.error(`Chat round ${i + 1} failed:`, chatJson?.error || chatJson);
       process.exit(1);
     }
     const assistant = (chatJson.data?.message || '').slice(0, 120).replace(/\n/g, ' ');
-    console.log(`[round ${i + 1}] assistant =`, assistant, '...');
+    console.log(`[round ${i + 1}] assistant =`, assistant, '...', `(${chatElapsedMs} ms)`);
 
     // load session and show delta
     const latest = await loadLatestSession(sessionId);
@@ -165,7 +171,8 @@ async function main() {
     prevSnapshot = snap;
   }
 
-  console.log(`[done] session_id=${sessionId} rounds=${ROUNDS} totalLogs=${prevSnapshot.totalLogs}`);
+  const avgMs = ROUNDS > 0 ? Math.round(totalChatMs / ROUNDS) : 0;
+  console.log(`[done] session_id=${sessionId} rounds=${ROUNDS} totalLogs=${prevSnapshot.totalLogs} avg_round_ms=${avgMs}`);
 }
 
 main().catch((e) => {

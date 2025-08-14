@@ -6,6 +6,8 @@ import { buildSystemPrompt } from '@/lib/prompt';
 import { ObjectId } from 'mongodb';
 import { DEFAULT_CONFIG } from '@/types';
 
+export const runtime = 'nodejs';
+
 function extractKeywords(text: string): string[] {
   return text
     .toLowerCase()
@@ -14,113 +16,80 @@ function extractKeywords(text: string): string[] {
     .slice(0, 5);
 }
 
-export async function POST(request: NextRequest) {
+// Run heavy non-essential work after the response has been sent
+async function runBackgroundUpdates(params: {
+  mode: 'normal' | 'limit';
+  activity_id: string;
+  session_id: string;
+  user_id: string;
+  user_name: string;
+  message: string;
+  assistant: string;
+  agent: AgentProfile;
+  course: CoursePackage;
+  units: any[];
+  unitObj: Unit | undefined;
+  currentUnitId: string;
+  baseHotMemories: any[];
+  baseColdMemories: any[];
+}) {
   try {
-    const body = await request.json();
-    const { activity_id, user_id = 'default_user', session_id, user_name = '', message } = body || {};
-
-    if (!activity_id || !session_id || !message) {
-      return NextResponse.json({ success: false, error: '需要 activity_id、session_id 與 message' } as ApiResponse<{ message: string }>, { status: 400 });
-    }
-
-    const activities = await getActivitiesCollection();
-    const agentsCol = await getAgentsCollection();
-    const cpCol = await getCoursePackagesCollection();
-    const unitsCol = await getUnitsCollection();
-    const sessions = await getSessionsCollection();
-    const db = await getDatabase();
-    const memCol = db.collection('memories');
-
-    const activity = await activities.findOne({ _id: activity_id } as any);
-    if (!activity) return NextResponse.json({ success: false, error: '找不到活動' } as ApiResponse<any>, { status: 404 });
-
-    const agent = await agentsCol.findOne({ _id: activity.agent_profile_id } as any) as any as AgentProfile;
-    const course = await cpCol.findOne({ _id: activity.course_package_id } as any) as any as CoursePackage;
-    const units = await unitsCol.find({ course_package_id: String(activity.course_package_id) } as any).sort({ order: 1 }).toArray();
-
-    // Integrated memories baseline: agent + activity + dynamic (persisted)
-    const agentMemories = ((agent as any)?.memories || []) as any[];
-    const activityMemories = ((activity as any)?.memories || []) as any[];
-    const dynamicMemories = await memCol
-      .find({
-        agent_id: String((agent as any)?._id || ''),
-        created_by_user_id: String(user_id),
-        activity_id: String(activity_id),
-        session_id: String(session_id),
-      })
-      .sort({ created_at: 1 })
-      .toArray();
-
-    let hotMemories = [
-      ...agentMemories.filter((m: any) => m.type === 'hot'),
-      ...activityMemories.filter((m: any) => m.type === 'hot'),
-      ...dynamicMemories.filter((m: any) => m.type === 'hot'),
-    ];
-    let coldMemories = [
-      ...agentMemories.filter((m: any) => m.type === 'cold'),
-      ...activityMemories.filter((m: any) => m.type === 'cold'),
-      ...dynamicMemories.filter((m: any) => m.type === 'cold'),
-    ];
-    const baseHotCount = hotMemories.length; // baseline before promotions/additions
-
-    // Determine current unit from latest session
-    const filter = { activity_id, user_id, session_id };
-    const existing = await sessions.findOne(filter as any) as any as SessionRecord | null;
-
-    let currentUnitId: string | undefined;
-    if (existing && existing.unit_results?.length) {
-      const lastWithLogs = [...existing.unit_results].reverse().find(u => (u.conversation_logs?.length || 0) > 0);
-      currentUnitId = (lastWithLogs?.unit_id as any)?.toString?.() || undefined;
-    }
-
-    if (!currentUnitId && units.length) {
-      currentUnitId = String(units[0]._id);
-    }
-
-    const unitObj = units.find((u: any) => String(u._id) === String(currentUnitId)) as any as Unit | undefined;
+    const {
+      mode,
+      activity_id,
+      session_id,
+      user_id,
+      user_name,
+      message,
+      assistant,
+      agent,
+      course,
+      units,
+      unitObj,
+      currentUnitId,
+      baseHotMemories,
+      baseColdMemories,
+    } = params;
 
     const openai = getOpenAIClient();
+    const db = await getDatabase();
+    const memCol = db.collection('memories');
+    const sessions = await getSessionsCollection();
 
-    // Prepare prior conversation history for current unit (limit last 10 logs)
-    const existingUnitLogs = (existing?.unit_results || [])
-      .find((u: any) => String(u.unit_id) === String(currentUnitId))?.conversation_logs || [];
-    const historyLogs = existingUnitLogs.slice(-10).map((l: any) => ({
-      role: (l.role === 'assistant' ? 'assistant' : 'user') as 'assistant' | 'user',
-      content: String(l.content || ''),
-    }));
+    const filter = { activity_id, user_id, session_id } as any;
+    const existing = (await sessions.findOne(filter)) as any as SessionRecord | null;
 
-    // Enforce max turns per unit (before any LLM calls)
-    const currentTurnCount = (existing?.unit_results || [])
-      .find((u: any) => String(u.unit_id) === String(currentUnitId))?.turn_count || 0;
-    const maxTurns = unitObj?.max_turns ?? DEFAULT_CONFIG.UNIT.MAX_TURNS;
-    if (unitObj && currentTurnCount >= maxTurns) {
+    let hotMemories = [...baseHotMemories];
+    let coldMemories = [...baseColdMemories];
+    const baseHotCount = hotMemories.length;
+
       const now = new Date();
+
+    if (mode === 'limit') {
+      // Transition to next unit (if any), mark current as failed, persist
       const unitResults = (existing?.unit_results || []).map((u: any) => ({ ...u }));
       const idxCur = unitResults.findIndex((u: any) => String(u.unit_id) === String(currentUnitId));
       if (idxCur === -1) {
         unitResults.push({
-          unit_id: currentUnitId!,
+          unit_id: currentUnitId,
           status: 'failed' as const,
-          turn_count: currentTurnCount,
+          turn_count: (existing?.unit_results || []).find((u: any) => String(u.unit_id) === String(currentUnitId))?.turn_count || 0,
           important_keywords: [] as string[],
           standard_pass_rules: (unitObj?.pass_condition?.value || []) as string[],
-          conversation_logs: existingUnitLogs as any[],
+          conversation_logs: (existing?.unit_results || []).find((u: any) => String(u.unit_id) === String(currentUnitId))?.conversation_logs || [],
         });
       } else {
         unitResults[idxCur].status = 'failed';
       }
 
-      let transitioned = false;
       let courseCompleted = false;
       const idxUnit = units.findIndex((u: any) => String(u._id) === String(currentUnitId));
       const nextUnit = idxUnit >= 0 && idxUnit + 1 < units.length ? units[idxUnit + 1] : undefined;
-      const memorySnapshot = [...hotMemories, ...coldMemories];
       if (nextUnit) {
-        transitioned = true;
         const nextIntro = nextUnit?.intro_message;
         const nextPrompt = buildSystemPrompt({ agent: agent as any, unit: nextUnit as any, coursePackage: course as any, context: '', hotMemories: hotMemories as any });
         const nextUnitExistingIdx = unitResults.findIndex((u: any) => String(u.unit_id) === String(nextUnit._id));
-        const introLog = nextIntro ? [{ role: 'assistant', content: nextIntro, timestamp: now, system_prompt: nextPrompt, memories: memorySnapshot }] as any[] : [];
+        const introLog = nextIntro ? [{ role: 'assistant', content: nextIntro, timestamp: now, system_prompt: nextPrompt, memories: [...hotMemories, ...coldMemories] }] as any[] : [];
         if (nextUnitExistingIdx === -1) {
           unitResults.push({
             unit_id: String(nextUnit._id),
@@ -142,14 +111,11 @@ export async function POST(request: NextRequest) {
       if (courseCompleted) {
         updateSet.summary = `課程完成於 ${new Date().toLocaleString('zh-TW')}`;
       }
-      await sessions.updateOne(filter as any, { $set: updateSet }, { upsert: true });
-      const saved = await sessions.findOne(filter as any);
-
-      const limitMsg = '已達本關卡最大輪數，已自動進入下一關（若有）。';
-      return NextResponse.json({ success: true, data: { message: limitMsg, session: saved, transitioned, courseCompleted } } as ApiResponse<any>);
+      await sessions.updateOne(filter, { $set: updateSet }, { upsert: true });
+      return;
     }
 
-    // 2nd stage: from cold memories, pick relevant ones via LLM
+    // 1) Relevance selection: promote relevant cold memories to hot for this turn
     if (coldMemories.length > 0) {
       const coldList = coldMemories.map((m, i) => `${i + 1}. ${m.content}`).join('\n');
       const selectPrompt = `請分析以下冷記憶是否與用戶輸入相關。\n\n冷記憶列表：\n${coldList}\n\n用戶輸入：${message}\n\n請只返回相關記憶的編號（用逗號分隔），如果沒有相關的請返回"無"。例如：1,3,5 或 無`;
@@ -171,7 +137,6 @@ export async function POST(request: NextRequest) {
             .filter((n) => !isNaN(n) && n > 0 && n <= coldMemories.length)
             .map((n) => n - 1);
           const relevantCold = idxs.map((i) => coldMemories[i]);
-          // Promote to hot for this turn
           hotMemories = [
             ...hotMemories,
             ...relevantCold.map((m) => ({ ...m, type: 'hot' as const })),
@@ -180,30 +145,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Build system prompt (persona + unit + course + hot memories incl. promoted)
-    const systemPrompt = buildSystemPrompt({
-      agent: agent as any,
-      unit: unitObj as any,
-      coursePackage: course as any,
-      context: message,
-      hotMemories: hotMemories as any,
-    });
-
-    // Call LLM for assistant reply
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        ...historyLogs,
-        { role: 'user', content: message },
-      ],
-      temperature: 0.7,
-      max_tokens: 800,
-    });
-
-    const assistant = completion.choices[0]?.message?.content || '';
-
-    // 3rd stage: create new memories (hot + cold) based on the exchange
+    // 2) Create new memories based on this exchange
     const keywords = extractKeywords(`${assistant} ${message}`);
     const newContent = `對方說: ${message}\n你回應: ${assistant}`;
 
@@ -212,31 +154,30 @@ export async function POST(request: NextRequest) {
       agent_id: String((agent as any)?._id || ''),
       activity_id: String(activity_id),
       session_id: String(session_id),
-      type: 'hot',
+      type: 'hot' as const,
       content: newContent,
       tags: keywords,
       created_by_user_id: String(user_id),
-      created_at: new Date(),
+      created_at: now,
     };
     const coldDoc = {
       _id: new ObjectId(),
       agent_id: String((agent as any)?._id || ''),
       activity_id: String(activity_id),
       session_id: String(session_id),
-      type: 'cold',
+      type: 'cold' as const,
       content: newContent,
       tags: keywords,
       created_by_user_id: String(user_id),
-      created_at: new Date(),
+      created_at: now,
     };
 
     await memCol.insertMany([hotDoc, coldDoc]);
 
-    // Update in-memory arrays for snapshot
     hotMemories = [...hotMemories, { ...hotDoc, _id: String(hotDoc._id) } as any];
     coldMemories = [...coldMemories, { ...coldDoc, _id: String(coldDoc._id) } as any];
 
-    // Consolidate hot memories to a target count based on baseline (similar to client)
+    // 3) Consolidate hot memories if exceeding target
     const targetCount = Math.max(3, baseHotCount);
     let consolidated: any[] = [];
     if (hotMemories.length > targetCount) {
@@ -264,7 +205,7 @@ export async function POST(request: NextRequest) {
               agent_id: String((agent as any)?._id || ''),
               activity_id: String(activity_id),
               session_id: String(session_id),
-              type: 'hot',
+              type: 'hot' as const,
               content: m[1].trim(),
               tags: extractKeywords(m[1]),
               created_by_user_id: String(user_id),
@@ -274,7 +215,6 @@ export async function POST(request: NextRequest) {
         }
       }
       if (consolidated.length > 0) {
-        // Persist consolidation: demote previous dynamic hot to cold, insert consolidated as new hot
         await memCol.updateMany(
           {
             agent_id: String((agent as any)?._id || ''),
@@ -285,10 +225,8 @@ export async function POST(request: NextRequest) {
           },
           { $set: { type: 'cold' } }
         );
-        if (consolidated.length > 0) {
           await memCol.insertMany(consolidated);
-        }
-        // Update snapshot arrays
+
         const isCurrentDynamic = (m: any) =>
           m.created_by_user_id === String(user_id) &&
           String(m.activity_id) === String(activity_id) &&
@@ -308,16 +246,24 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Persist into session (append logs for current unit) with final memory snapshot
-    const now = new Date();
-    const existingAgain = await sessions.findOne(filter as any) as any as SessionRecord | null;
+    // 4) Persist session updates (append logs, pass check, transitions)
+    const existingAgain = (await sessions.findOne(filter)) as any as SessionRecord | null;
     const unitResults = (existingAgain?.unit_results || []).map((u: any) => ({ ...u }));
-    const idx = unitResults.findIndex((u: any) => String(u.unit_id) === String(currentUnitId));
+    const systemPrompt = buildSystemPrompt({
+      agent: agent as any,
+      unit: unitObj as any,
+      coursePackage: course as any,
+      context: message,
+      hotMemories: hotMemories as any,
+    });
+
     const memorySnapshot = [...hotMemories, ...coldMemories];
     const logsAppend = [
       { role: 'user', content: message, timestamp: now, system_prompt: systemPrompt, memories: memorySnapshot },
       { role: 'assistant', content: assistant, timestamp: now, memories: memorySnapshot },
     ];
+
+    const idx = unitResults.findIndex((u: any) => String(u.unit_id) === String(currentUnitId));
     if (idx === -1) {
       unitResults.push({
         unit_id: currentUnitId!,
@@ -341,7 +287,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Pass check and unit transition (keyword or LLM)
+    // Pass check and unit transition
     let transitioned = false;
     let courseCompleted = false;
     let isPassed = false;
@@ -357,10 +303,6 @@ export async function POST(request: NextRequest) {
       const currentUnitLogs = (unitResults.find((u: any) => String(u.unit_id) === String(currentUnitId))?.conversation_logs || []) as any[];
       const convoText = currentUnitLogs.map((l) => `${l.role}: ${l.content}`).join('\n');
       const checkPrompt = `請判斷以下對話是否滿足通過條件：\n\n通過條件：${(unitObj.pass_condition.value || []).join(', ')}\n\n對話內容：\n${convoText}\n\n請只回答 "YES" 或 "NO"，並簡單說明原因。`;
-      console.log('=== LLM PASS CHECK START ===');
-      console.log('session_id:', session_id, 'unit_id:', currentUnitId);
-      console.log('conditions:', unitObj?.pass_condition?.value);
-      console.log('prompt:\n', checkPrompt);
       const judge = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [{ role: 'user', content: checkPrompt }],
@@ -369,10 +311,6 @@ export async function POST(request: NextRequest) {
       const result = (judge.choices[0]?.message?.content || '');
       const normalized = result.trim().toLowerCase();
       isPassed = /^yes\b/.test(normalized);
-      console.log('judgeResult:', judge.choices[0]?.message);
-      console.log('isPassed:', isPassed);
-      console.log('=== LLM PASS CHECK END ===');
-      // Persist judge evaluation text into evaluation_results for the current unit
       const targetForEval = unitResults.find((u: any) => String(u.unit_id) === String(currentUnitId));
       if (targetForEval) {
         if (!Array.isArray((targetForEval as any).evaluation_results)) {
@@ -414,7 +352,6 @@ export async function POST(request: NextRequest) {
         courseCompleted = true;
       }
     } else if (reachedLimit) {
-      // 未通關且達到最大輪數：直接換到下一關
       const target = unitResults.find((u: any) => String(u.unit_id) === String(currentUnitId));
       if (target) target.status = 'failed';
       const idxUnit = units.findIndex((u: any) => String(u._id) === String(currentUnitId));
@@ -448,10 +385,204 @@ export async function POST(request: NextRequest) {
       updateSet.summary = `課程完成於 ${new Date().toLocaleString('zh-TW')}`;
     }
 
-    await sessions.updateOne(filter as any, { $set: updateSet }, { upsert: true });
-    const saved = await sessions.findOne(filter as any);
+    await sessions.updateOne(filter, { $set: updateSet }, { upsert: true });
+  } catch (error) {
+    console.error('background updates error:', error);
+  }
+}
 
-    return NextResponse.json({ success: true, data: { message: assistant, session: saved, transitioned, courseCompleted } } as ApiResponse<any>);
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { activity_id, user_id = 'default_user', session_id, user_name = '', message } = body || {};
+
+    if (!activity_id || !session_id || !message) {
+      return NextResponse.json({ success: false, error: '需要 activity_id、session_id 與 message' } as ApiResponse<{ message: string }>, { status: 400 });
+    }
+
+    const activities = await getActivitiesCollection();
+    const agentsCol = await getAgentsCollection();
+    const cpCol = await getCoursePackagesCollection();
+    const unitsCol = await getUnitsCollection();
+    const sessions = await getSessionsCollection();
+    const db = await getDatabase();
+    const memCol = db.collection('memories');
+
+    const activity = await activities.findOne({ _id: activity_id } as any);
+    if (!activity) return NextResponse.json({ success: false, error: '找不到活動' } as ApiResponse<any>, { status: 404 });
+
+    const agent = await agentsCol.findOne({ _id: activity.agent_profile_id } as any) as any as AgentProfile;
+    const course = await cpCol.findOne({ _id: activity.course_package_id } as any) as any as CoursePackage;
+    const units = await unitsCol.find({ course_package_id: String(activity.course_package_id) } as any).sort({ order: 1 }).toArray();
+
+    // Baseline memories: agent + activity + dynamic (persisted)
+    const agentMemories = ((agent as any)?.memories || []) as any[];
+    const activityMemories = ((activity as any)?.memories || []) as any[];
+    const dynamicMemories = await memCol
+      .find({
+        agent_id: String((agent as any)?._id || ''),
+        created_by_user_id: String(user_id),
+        activity_id: String(activity_id),
+        session_id: String(session_id),
+      })
+      .sort({ created_at: 1 })
+      .toArray();
+
+    let baseHotMemories = [
+      ...agentMemories.filter((m: any) => m.type === 'hot'),
+      ...activityMemories.filter((m: any) => m.type === 'hot'),
+      ...dynamicMemories.filter((m: any) => m.type === 'hot'),
+    ];
+    let baseColdMemories = [
+      ...agentMemories.filter((m: any) => m.type === 'cold'),
+      ...activityMemories.filter((m: any) => m.type === 'cold'),
+      ...dynamicMemories.filter((m: any) => m.type === 'cold'),
+    ];
+
+    // Determine current unit from latest session
+    const filter = { activity_id, user_id, session_id };
+    const existing = await sessions.findOne(filter as any) as any as SessionRecord | null;
+
+    let currentUnitId: string | undefined;
+    if (existing && existing.unit_results?.length) {
+      const lastWithLogs = [...existing.unit_results].reverse().find(u => (u.conversation_logs?.length || 0) > 0);
+      currentUnitId = (lastWithLogs?.unit_id as any)?.toString?.() || undefined;
+    }
+    if (!currentUnitId && units.length) {
+      currentUnitId = String(units[0]._id);
+    }
+    const unitObj = units.find((u: any) => String(u._id) === String(currentUnitId)) as any as Unit | undefined;
+
+    const openai = getOpenAIClient();
+
+    // Prepare prior conversation history for current unit (limit last 10 logs)
+    const existingUnitLogs = (existing?.unit_results || [])
+      .find((u: any) => String(u.unit_id) === String(currentUnitId))?.conversation_logs || [];
+    const historyLogs = existingUnitLogs.slice(-10).map((l: any) => ({
+      role: (l.role === 'assistant' ? 'assistant' : 'user') as 'assistant' | 'user',
+      content: String(l.content || ''),
+    }));
+
+    // Enforce max turns per unit (quick response path; heavy updates deferred)
+    const currentTurnCount = (existing?.unit_results || [])
+      .find((u: any) => String(u.unit_id) === String(currentUnitId))?.turn_count || 0;
+    const maxTurns = unitObj?.max_turns ?? DEFAULT_CONFIG.UNIT.MAX_TURNS;
+    if (unitObj && currentTurnCount >= maxTurns) {
+      const idxUnit = units.findIndex((u: any) => String(u._id) === String(currentUnitId));
+      const nextUnit = idxUnit >= 0 && idxUnit + 1 < units.length ? units[idxUnit + 1] : undefined;
+      const transitioned = !!nextUnit;
+      const courseCompleted = !nextUnit;
+      const limitMsg = '已達本關卡最大輪數，已自動進入下一關（若有）。';
+
+      // Fire-and-forget background updates
+      setImmediate(() => {
+        runBackgroundUpdates({
+          mode: 'limit',
+          activity_id,
+          session_id,
+          user_id,
+          user_name,
+          message,
+          assistant: '',
+          agent: agent as any,
+          course: course as any,
+          units,
+          unitObj: unitObj as any,
+          currentUnitId: currentUnitId!,
+          baseHotMemories,
+          baseColdMemories,
+        });
+      });
+
+      return NextResponse.json({ success: true, data: { message: limitMsg, session: existing, transitioned, courseCompleted } } as ApiResponse<any>);
+    }
+
+    // Build system prompt (skip cold promotion before reply for speed)
+    const systemPrompt = buildSystemPrompt({
+      agent: agent as any,
+      unit: unitObj as any,
+      coursePackage: course as any,
+      context: message,
+      hotMemories: baseHotMemories as any,
+    });
+
+    // Assistant reply (only blocking LLM call)
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...historyLogs,
+        { role: 'user', content: message },
+      ],
+      temperature: 0.7,
+      max_tokens: 800,
+    });
+    const assistant = completion.choices[0]?.message?.content || '';
+
+    // Prepare a session preview (not persisted yet)
+    const now = new Date();
+    const unitResults = (existing?.unit_results || []).map((u: any) => ({ ...u }));
+    const idx = unitResults.findIndex((u: any) => String(u.unit_id) === String(currentUnitId));
+    const memorySnapshot = [...baseHotMemories, ...baseColdMemories];
+    const logsAppend = [
+      { role: 'user', content: message, timestamp: now, system_prompt: systemPrompt, memories: memorySnapshot },
+      { role: 'assistant', content: assistant, timestamp: now, memories: memorySnapshot },
+    ];
+    if (idx === -1) {
+      unitResults.push({
+        unit_id: currentUnitId!,
+        status: 'failed' as const,
+        turn_count: 1,
+        important_keywords: [] as string[],
+        standard_pass_rules: (unitObj?.pass_condition?.value || []) as string[],
+        evaluation_results: [],
+        conversation_logs: logsAppend as any,
+      });
+    } else {
+      const target = unitResults[idx];
+      target.turn_count = (target.turn_count || 0) + 1;
+      target.standard_pass_rules = (unitObj?.pass_condition?.value || target.standard_pass_rules || []) as string[];
+      target.conversation_logs = [
+        ...(target.conversation_logs || []),
+        ...logsAppend,
+      ];
+      if (!Array.isArray((target as any).evaluation_results)) {
+        (target as any).evaluation_results = [];
+      }
+    }
+
+    // Respond immediately
+    const previewSession = {
+      ...(existing || {}),
+      activity_id,
+      user_id,
+      session_id,
+      user_name,
+      unit_results: unitResults,
+      generated_at: now,
+    } as any;
+
+    // Kick off background updates (memories, consolidation, pass check, DB writes)
+    setImmediate(() => {
+      runBackgroundUpdates({
+        mode: 'normal',
+        activity_id,
+        session_id,
+        user_id,
+        user_name,
+        message,
+        assistant,
+        agent: agent as any,
+        course: course as any,
+        units,
+        unitObj: unitObj as any,
+        currentUnitId: currentUnitId!,
+        baseHotMemories,
+        baseColdMemories,
+      });
+    });
+
+    return NextResponse.json({ success: true, data: { message: assistant, session: previewSession, transitioned: false, courseCompleted: false } } as ApiResponse<any>);
   } catch (error) {
     console.error('interaction chat error:', error);
     return NextResponse.json({ success: false, error: '對話失敗' } as ApiResponse<any>, { status: 500 });
